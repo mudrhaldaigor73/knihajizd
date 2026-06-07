@@ -25,6 +25,32 @@ npm run dev
 
 Aplikace je offline. Instalace závislostí vyžaduje internet pouze jednorázově při přípravě projektu.
 
+## Webová verze
+
+Webová verze běží bez serveru. Data se ukládají pouze v prohlížeči uživatele do `localStorage`; JSON záloha, CSV i Excel export se stahují lokálně.
+
+```bash
+npm run web:dev
+```
+
+Produkční build pro Cloudflare Pages:
+
+```bash
+npm run web:build
+```
+
+Výstupní složka:
+
+```text
+dist/renderer
+```
+
+Nastavení Cloudflare Pages:
+
+- Build command: `npm run web:build`
+- Build output directory: `dist/renderer`
+- Custom domain: `mojeknihajizd.com`
+
 ## Sestavení aplikace
 
 ```bash

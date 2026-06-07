@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FuelRecord, LogbookData, Trip, Vehicle } from "./types";
 import { blankFuel, blankTrip, blankVehicle, emptyData, fuelTotal, getLastOdometer, summary, tripKm, vehicleName } from "./lib/data";
 import { validateAllTrips, validateTrip } from "./lib/validation";
+import { getLogbookApi } from "./lib/logbookApi";
 
 type View = "dashboard" | "vehicles" | "trips" | "fuels" | "export" | "settings";
 
@@ -15,6 +16,8 @@ const nav: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
   { id: "settings", label: "Nastavení", icon: Settings }
 ];
 
+const logbookApi = getLogbookApi();
+
 export function App() {
   const [data, setData] = useState<LogbookData>(emptyData());
   const [filePath, setFilePath] = useState<string | null>(null);
@@ -24,7 +27,7 @@ export function App() {
   const issues = useMemo(() => validateAllTrips(data), [data]);
 
   useEffect(() => {
-    void window.logbook.loadInitial().then((state) => {
+    void logbookApi.loadInitial().then((state) => {
       setData(state.data);
       setFilePath(state.path);
       document.documentElement.dataset.theme = state.data.settings.theme;
@@ -36,19 +39,19 @@ export function App() {
   }, [data.settings.theme]);
 
   async function save() {
-    const result = await window.logbook.save(data);
+    const result = await logbookApi.save(data);
     setMessage(result.ok ? `Uloženo: ${result.path}` : result.message ?? "Uložení se nezdařilo.");
     if (result.path) setFilePath(result.path);
   }
 
   async function saveAs() {
-    const result = await window.logbook.saveAs(data);
+    const result = await logbookApi.saveAs(data);
     setMessage(result.ok ? `Uloženo jako: ${result.path}` : result.message ?? "Uložení se nezdařilo.");
     if (result.path) setFilePath(result.path);
   }
 
   async function openBook() {
-    const state = await window.logbook.openBook();
+    const state = await logbookApi.openBook();
     if (!state) return;
     setData(state.data);
     setFilePath(state.path);
@@ -57,7 +60,7 @@ export function App() {
 
   async function newBook() {
     if (!confirm("Opravdu vytvořit novou prázdnou knihu jízd? Neuložené změny budou ztraceny.")) return;
-    const state = await window.logbook.newBook();
+    const state = await logbookApi.newBook();
     setData(state.data);
     setFilePath(state.path);
     setMessage("Vytvořena nová kniha jízd.");
@@ -301,11 +304,11 @@ function Fuels({ data, updateData }: { data: LogbookData; updateData: (updater: 
 
 function ExportPanel({ data, setData, setMessage }: { data: LogbookData; setData: (data: LogbookData) => void; setMessage: (message: string) => void }) {
   const run = async (kind: "xlsx" | "csv") => {
-    const result = kind === "xlsx" ? await window.logbook.exportXlsx(data) : await window.logbook.exportCsv(data);
+    const result = kind === "xlsx" ? await logbookApi.exportXlsx(data) : await logbookApi.exportCsv(data);
     setMessage(result.ok ? `Export hotový: ${result.path}` : result.message ?? "Export se nezdařil.");
   };
   const importJson = async () => {
-    const state = await window.logbook.importJson();
+    const state = await logbookApi.importJson();
     if (!state) return;
     setData(state.data);
     setMessage(`Importováno: ${state.path}`);
@@ -325,7 +328,7 @@ function ExportPanel({ data, setData, setMessage }: { data: LogbookData; setData
 
 function SettingsPanel({ data, updateData, filePath, setMessage }: { data: LogbookData; updateData: (updater: (current: LogbookData) => LogbookData) => void; filePath: string | null; setMessage: (message: string) => void }) {
   const backup = async () => {
-    const result = await window.logbook.backupNow(data);
+    const result = await logbookApi.backupNow(data);
     setMessage(result.ok ? `Záloha vytvořena: ${result.path}` : result.message ?? "Záloha se nezdařila.");
   };
   return (
