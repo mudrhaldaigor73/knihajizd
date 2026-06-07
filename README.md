@@ -54,6 +54,8 @@ Nastavení Cloudflare Pages:
 - Deploy command pro klasický Pages režim: nechat prázdné
 - Custom domain: `mojeknihajizd.com`
 
+V režimu Cloudflare Workers/Assets se nepoužívá `_redirects`; fallback pro jednostránkovou aplikaci řeší `wrangler.json` přes `not_found_handling`.
+
 ## Sestavení aplikace
 
 ```bash
