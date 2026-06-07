@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "vehicles": [
+    {
+      "id": "vehicle-skoda-octavia",
+      "spz": "1AB 2345",
+      "brand": "Škoda",
+      "model": "Octavia",
+      "year": 2021,
+      "fuel": "nafta",
+      "initialOdometer": 38200,
+      "note": "Firemní vozidlo pro obchodní cesty"
+    },
+    {
+      "id": "vehicle-vw-caddy",
+      "spz": "2CD 6789",
+      "brand": "Volkswagen",
+      "model": "Caddy",
+      "year": 2019,
+      "fuel": "benzín",
+      "initialOdometer": 61200,
+      "note": "Servisní vozidlo"
+    }
+  ],
+  "trips": [
+    {
+      "id": "trip-001",
+      "date": "2026-01-08",
+      "departureTime": "08:10",
+      "arrivalTime": "09:25",
+      "vehicleId": "vehicle-skoda-octavia",
+      "driver": "Jan Novák",
+      "from": "Praha",
+      "to": "Mladá Boleslav",
+      "purpose": "Jednání s dodavatelem",
+      "type": "služební",
+      "odometerStart": 38200,
+      "odometerEnd": 38271,
+      "note": ""
+    },
+    {
+      "id": "trip-002",
+      "date": "2026-01-08",
+      "departureTime": "14:00",
+      "arrivalTime": "15:05",
+      "vehicleId": "vehicle-skoda-octavia",
+      "driver": "Jan Novák",
+      "from": "Mladá Boleslav",
+      "to": "Praha",
+      "purpose": "Návrat z jednání",
+      "type": "služební",
+      "odometerStart": 38271,
+      "odometerEnd": 38342,
+      "note": ""
+    },
+    {
+      "id": "trip-003",
+      "date": "2026-02-03",
+      "departureTime": "17:20",
+      "arrivalTime": "18:05",
+      "vehicleId": "vehicle-skoda-octavia",
+      "driver": "Jan Novák",
+      "from": "Praha",
+      "to": "Beroun",
+      "purpose": "Soukromá cesta",
+      "type": "soukromá",
+      "odometerStart": 38342,
+      "odometerEnd": 38378,
+      "note": ""
+    },
+    {
+      "id": "trip-004",
+      "date": "2026-02-12",
+      "departureTime": "07:45",
+      "arrivalTime": "10:20",
+      "vehicleId": "vehicle-vw-caddy",
+      "driver": "Petra Svobodová",
+      "from": "Brno",
+      "to": "Olomouc",
+      "purpose": "Servisní výjezd",
+      "type": "služební",
+      "odometerStart": 61200,
+      "odometerEnd": 61286,
+      "note": "Kontrola zařízení u zákazníka"
+    }
+  ],
+  "fuels": [
+    {
+      "id": "fuel-001",
+      "date": "2026-01-09",
+      "vehicleId": "vehicle-skoda-octavia",
+      "station": "MOL Praha",
+      "liters": 42.5,
+      "pricePerLiter": 38.9,
+      "totalPrice": 1653.25,
+      "odometer": 38350,
+      "note": ""
+    },
+    {
+      "id": "fuel-002",
+      "date": "2026-02-12",
+      "vehicleId": "vehicle-vw-caddy",
+      "station": "Shell Olomouc",
+      "liters": 36.2,
+      "pricePerLiter": 39.5,
+      "totalPrice": 1429.9,
+      "odometer": 61286,
+      "note": ""
+    }
+  ],
+  "settings": {
+    "highKmPerDayThreshold": 800,
+    "autoBackup": true,
+    "theme": "light"
+  }
+}
