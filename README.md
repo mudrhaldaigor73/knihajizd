@@ -50,7 +50,8 @@ Nastavení Cloudflare Pages:
 - Framework preset: `None`
 - Build command: `npm run web:build`
 - Build output directory: `dist/renderer`
-- Deploy command: nechat prázdné
+- Deploy command pro Workers/Assets režim: `npx wrangler deploy`
+- Deploy command pro klasický Pages režim: nechat prázdné
 - Custom domain: `mojeknihajizd.com`
 
 ## Sestavení aplikace
