@@ -11,6 +11,12 @@ export interface Vehicle {
   note: string;
 }
 
+export interface Driver {
+  id: string;
+  name: string;
+  note: string;
+}
+
 export interface Trip {
   id: string;
   date: string;
@@ -42,6 +48,7 @@ export interface FuelRecord {
 export interface LogbookData {
   version: 1;
   vehicles: Vehicle[];
+  drivers: Driver[];
   trips: Trip[];
   fuels: FuelRecord[];
   settings: {

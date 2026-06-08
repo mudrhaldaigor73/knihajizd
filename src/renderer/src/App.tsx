@@ -1,17 +1,18 @@
-import { Car, Download, Fuel, Gauge, LayoutDashboard, LogOut, Moon, Plus, Save, Search, Settings, Sun, Trash2, Upload } from "lucide-react";
+import { Car, Download, Fuel, Gauge, LayoutDashboard, LogOut, Moon, Plus, Save, Search, Settings, Sun, Trash2, Upload, Users } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { FuelRecord, LogbookData, Trip, Vehicle } from "./types";
-import { blankFuel, blankTrip, blankVehicle, emptyData, fuelTotal, getLastOdometer, summary, tripKm, vehicleName } from "./lib/data";
+import type { Driver, FuelRecord, LogbookData, Trip, Vehicle } from "./types";
+import { blankDriver, blankFuel, blankTrip, blankVehicle, emptyData, fuelTotal, getLastOdometer, summary, tripKm, vehicleName } from "./lib/data";
 import { validateAllTrips, validateTrip } from "./lib/validation";
 import { getLogbookApi } from "./lib/logbookApi";
 import { isAuthenticated, signIn, signOut, usesDefaultPassword } from "./lib/auth";
 
-type View = "dashboard" | "vehicles" | "trips" | "fuels" | "export" | "settings";
+type View = "dashboard" | "vehicles" | "drivers" | "trips" | "fuels" | "export" | "settings";
 
 const nav: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "vehicles", label: "Vozidla", icon: Car },
+  { id: "drivers", label: "Řidiči", icon: Users },
   { id: "trips", label: "Jízdy", icon: Gauge },
   { id: "fuels", label: "Tankování", icon: Fuel },
   { id: "export", label: "Export", icon: Download },
@@ -125,6 +126,7 @@ export function App() {
 
         {view === "dashboard" && <Dashboard data={data} stats={stats} issues={issues.length} />}
         {view === "vehicles" && <Vehicles data={data} updateData={updateData} />}
+        {view === "drivers" && <Drivers data={data} updateData={updateData} />}
         {view === "trips" && <Trips data={data} updateData={updateData} />}
         {view === "fuels" && <Fuels data={data} updateData={updateData} />}
         {view === "export" && <ExportPanel data={data} setData={setData} setMessage={setMessage} />}
@@ -258,12 +260,57 @@ function Vehicles({ data, updateData }: { data: LogbookData; updateData: (update
   );
 }
 
+function Drivers({ data, updateData }: { data: LogbookData; updateData: (updater: (current: LogbookData) => LogbookData) => void }) {
+  const [form, setForm] = useState<Driver>(blankDriver());
+  const isEditing = data.drivers.some((driver) => driver.id === form.id);
+  const edit = (driver: Driver) => setForm(driver);
+  const save = () => {
+    const name = form.name.trim();
+    if (!name) return alert("Vyplňte jméno řidiče.");
+    if (!isEditing && data.drivers.length >= 3) return alert("V knize jízd mohou být maximálně 3 řidiči.");
+    if (data.drivers.some((driver) => driver.id !== form.id && driver.name.trim().toLowerCase() === name.toLowerCase())) return alert("Tento řidič už je zadaný.");
+    const normalized = { ...form, name };
+    updateData((current) => ({ ...current, drivers: current.drivers.some((item) => item.id === form.id) ? current.drivers.map((item) => item.id === form.id ? normalized : item) : [...current.drivers, normalized] }));
+    setForm(blankDriver());
+  };
+  const remove = (driver: Driver) => {
+    if (!confirm("Smazat řidiče? Dříve uložené jízdy si ponechají jeho jméno.")) return;
+    updateData((current) => ({ ...current, drivers: current.drivers.filter((item) => item.id !== driver.id) }));
+    if (form.id === driver.id) setForm(blankDriver());
+  };
+  return (
+    <section className="grid-two">
+      <div className="panel">
+        <div className="section-title"><h2>Řidič</h2><span>{data.drivers.length}/3 řidiči</span></div>
+        <div className="form-grid">
+          <Input label="Jméno řidiče" value={form.name} onChange={(name) => setForm({ ...form, name })} />
+          <label className="full"><span>Poznámka</span><textarea value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
+        </div>
+        <div className="actions left">
+          <button className="primary" onClick={save}><Plus size={16} /> Uložit řidiče</button>
+          <button onClick={() => setForm(blankDriver())}>Vyčistit</button>
+        </div>
+      </div>
+      <div className="panel">
+        <div className="section-title"><h2>Seznam řidičů</h2><span>Vyberou se ve formuláři jízdy</span></div>
+        {data.drivers.length === 0 && <p className="muted">Zatím není zadaný žádný řidič.</p>}
+        <div className="cards">{data.drivers.map((driver) => <article className="item" key={driver.id}><div><strong>{driver.name}</strong><span>{driver.note || "Bez poznámky"}</span></div><button onClick={() => edit(driver)}>Upravit</button><button className="danger" onClick={() => remove(driver)} title="Smazat"><Trash2 size={16} /></button></article>)}</div>
+      </div>
+    </section>
+  );
+}
+
 function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: (current: LogbookData) => LogbookData) => void }) {
-  const [form, setForm] = useState<Trip>(blankTrip(data.vehicles[0]?.id ?? ""));
+  const [form, setForm] = useState<Trip>(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""));
   const [query, setQuery] = useState("");
   const [type, setType] = useState("vše");
   const vehicles = new Map(data.vehicles.map((vehicle) => [vehicle.id, vehicle]));
   const formIssues = validateTrip(form, { ...data, trips: data.trips.filter((trip) => trip.id !== form.id) });
+
+  useEffect(() => {
+    if (!form.driver && data.drivers[0]?.name) setForm((current) => ({ ...current, driver: data.drivers[0].name }));
+  }, [data.drivers, form.driver]);
+
   const filtered = data.trips.filter((trip) => {
     const text = `${trip.date} ${trip.driver} ${trip.from} ${trip.to} ${trip.purpose} ${vehicleName(vehicles.get(trip.vehicleId))}`.toLowerCase();
     return text.includes(query.toLowerCase()) && (type === "vše" || trip.type === type);
@@ -271,7 +318,7 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
   const save = () => {
     if (formIssues.some((issue) => issue.severity === "error")) return alert("Jízdu nelze uložit, opravte povinná pole a tachometr.");
     updateData((current) => ({ ...current, trips: current.trips.some((item) => item.id === form.id) ? current.trips.map((item) => item.id === form.id ? form : item) : [...current.trips, form] }));
-    setForm(blankTrip(data.vehicles[0]?.id ?? ""));
+    setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""));
   };
   const remove = (id: string) => {
     if (!confirm("Opravdu smazat tuto jízdu?")) return;
@@ -286,7 +333,7 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
           <Input label="Čas odjezdu" type="time" value={form.departureTime} onChange={(departureTime) => setForm({ ...form, departureTime })} />
           <Input label="Čas příjezdu" type="time" value={form.arrivalTime} onChange={(arrivalTime) => setForm({ ...form, arrivalTime })} />
           <Select label="Vozidlo" value={form.vehicleId} onChange={(vehicleId) => setForm({ ...form, vehicleId, odometerStart: getLastOdometer(data, vehicleId), odometerEnd: getLastOdometer(data, vehicleId) })} options={data.vehicles.map((vehicle) => [vehicle.id, vehicleName(vehicle)])} />
-          <Input label="Řidič" value={form.driver} onChange={(driver) => setForm({ ...form, driver })} />
+          <Select label="Řidič" value={form.driver} onChange={(driver) => setForm({ ...form, driver })} options={driverOptions(data, form.driver)} />
           <Input label="Odkud" value={form.from} onChange={(from) => setForm({ ...form, from })} />
           <Input label="Kam" value={form.to} onChange={(to) => setForm({ ...form, to })} />
           <Input label="Účel cesty" value={form.purpose} onChange={(purpose) => setForm({ ...form, purpose })} />
@@ -296,7 +343,7 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
           <label><span>Poznámka</span><textarea value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
         </div>
         <IssueList issues={formIssues} />
-        <div className="actions left"><button className="primary" onClick={save}><Plus size={16} /> Uložit jízdu</button><button onClick={() => setForm(blankTrip(data.vehicles[0]?.id ?? ""))}>Vyčistit</button></div>
+        <div className="actions left"><button className="primary" onClick={save}><Plus size={16} /> Uložit jízdu</button><button onClick={() => setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""))}>Vyčistit</button></div>
       </div>
       <div className="panel">
         <div className="toolbar"><div className="search"><Search size={16} /><input placeholder="Hledat podle trasy, řidiče, účelu nebo vozidla" value={query} onChange={(event) => setQuery(event.target.value)} /></div><select value={type} onChange={(event) => setType(event.target.value)}><option>vše</option><option>služební</option><option>soukromá</option></select></div>
@@ -399,4 +446,10 @@ function Input({ label, value, onChange, type = "text" }: { label: string; value
 
 function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<[string, string]> }) {
   return <label><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}><option value="">Vyberte</option>{options.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>;
+}
+
+function driverOptions(data: LogbookData, currentDriver: string): Array<[string, string]> {
+  const options = data.drivers.map((driver) => [driver.name, driver.name] as [string, string]);
+  if (currentDriver && !options.some(([value]) => value === currentDriver)) options.push([currentDriver, currentDriver]);
+  return options;
 }

@@ -22,6 +22,18 @@
       "note": "Servisní vozidlo"
     }
   ],
+  "drivers": [
+    {
+      "id": "driver-jan-novak",
+      "name": "Jan Novák",
+      "note": "Hlavní řidič"
+    },
+    {
+      "id": "driver-petra-svobodova",
+      "name": "Petra Svobodová",
+      "note": "Servisní výjezdy"
+    }
+  ],
   "trips": [
     {
       "id": "trip-001",

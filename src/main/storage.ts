@@ -6,6 +6,7 @@ import type { LogbookData } from "../shared/types.js";
 export const defaultData = (): LogbookData => ({
   version: 1,
   vehicles: [],
+  drivers: [],
   trips: [],
   fuels: [],
   settings: {
@@ -14,6 +15,21 @@ export const defaultData = (): LogbookData => ({
     theme: "light"
   }
 });
+
+function createId() {
+  return `${Date.now()}-${Math.random()}`;
+}
+
+function normalizeData(parsed: Partial<LogbookData>): LogbookData {
+  const defaults = defaultData();
+  const inferredDrivers = [...new Set((parsed.trips ?? []).map((trip) => trip.driver).filter(Boolean))].slice(0, 3);
+  return {
+    ...defaults,
+    ...parsed,
+    drivers: parsed.drivers ?? inferredDrivers.map((name) => ({ id: createId(), name, note: "" })),
+    settings: { ...defaults.settings, ...parsed.settings }
+  };
+}
 
 const settingsPath = () => path.join(app.getPath("userData"), "settings.json");
 
@@ -32,11 +48,7 @@ export async function writeSettings(settings: { lastFilePath: string | null }) {
 
 export async function readDataFile(filePath: string): Promise<LogbookData> {
   const parsed = JSON.parse(await fs.readFile(filePath, "utf8")) as Partial<LogbookData>;
-  return {
-    ...defaultData(),
-    ...parsed,
-    settings: { ...defaultData().settings, ...parsed.settings }
-  };
+  return normalizeData(parsed);
 }
 
 export async function writeDataFile(filePath: string, data: LogbookData) {
