@@ -74,11 +74,48 @@ export const fuelTotal = (fuel: FuelRecord) => Number(fuel.totalPrice) || Number
 export const vehicleName = (vehicle?: Vehicle) =>
   vehicle ? `${vehicle.brand} ${vehicle.model} (${vehicle.spz})`.replace(/^ \(| \(\)$/g, "") : "Neznámé vozidlo";
 
+export function recalculateOdometers(data: LogbookData, vehicleId?: string): LogbookData {
+  const vehiclesToRecalculate = new Set(vehicleId ? [vehicleId] : data.vehicles.map((vehicle) => vehicle.id));
+  const trips = data.trips.map((trip) => ({ ...trip }));
+  const tripIndexesByVehicle = new Map<string, number[]>();
+
+  trips.forEach((trip, index) => {
+    if (!trip.vehicleId || !vehiclesToRecalculate.has(trip.vehicleId)) return;
+    const indexes = tripIndexesByVehicle.get(trip.vehicleId) ?? [];
+    indexes.push(index);
+    tripIndexesByVehicle.set(trip.vehicleId, indexes);
+  });
+
+  data.vehicles.forEach((vehicle) => {
+    if (!vehiclesToRecalculate.has(vehicle.id)) return;
+    let odometer = Number(vehicle.initialOdometer) || 0;
+    const indexes = tripIndexesByVehicle.get(vehicle.id) ?? [];
+    indexes
+      .sort((left, right) => compareTrips(trips[left], trips[right]) || left - right)
+      .forEach((index) => {
+        const trip = trips[index];
+        const km = tripKm(trip);
+        trips[index] = {
+          ...trip,
+          odometerStart: odometer,
+          odometerEnd: odometer + km
+        };
+        odometer += km;
+      });
+  });
+
+  return { ...data, trips };
+}
+
 export function getLastOdometer(data: LogbookData, vehicleId?: string) {
   const vehicleTrips = data.trips.filter((trip) => !vehicleId || trip.vehicleId === vehicleId);
   const tripMax = Math.max(0, ...vehicleTrips.map((trip) => Number(trip.odometerEnd) || 0));
   const vehicle = data.vehicles.find((item) => item.id === vehicleId);
   return Math.max(tripMax, vehicle?.initialOdometer ?? 0);
+}
+
+function compareTrips(left: Trip, right: Trip) {
+  return `${left.date} ${left.departureTime} ${left.arrivalTime}`.localeCompare(`${right.date} ${right.departureTime} ${right.arrivalTime}`);
 }
 
 export function summary(data: LogbookData) {

@@ -2,7 +2,7 @@ import { Car, Download, Fuel, Gauge, LayoutDashboard, LogOut, MapPin, Moon, Plus
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { Driver, FuelRecord, LogbookData, Place, Trip, Vehicle } from "./types";
-import { blankDriver, blankFuel, blankPlace, blankTrip, blankVehicle, createId, emptyData, fuelTotal, getLastOdometer, summary, tripKm, vehicleName } from "./lib/data";
+import { blankDriver, blankFuel, blankPlace, blankTrip, blankVehicle, createId, emptyData, fuelTotal, getLastOdometer, recalculateOdometers, summary, tripKm, vehicleName } from "./lib/data";
 import { validateAllTrips, validateTrip } from "./lib/validation";
 import { getLogbookApi } from "./lib/logbookApi";
 import { isAuthenticated, signIn, signOut, usesDefaultPassword } from "./lib/auth";
@@ -40,7 +40,7 @@ export function App() {
 
   useEffect(() => {
     void logbookApi.loadInitial().then((state) => {
-      setData(state.data);
+      setData(recalculateOdometers(state.data));
       setFilePath(state.path);
       document.documentElement.dataset.theme = state.data.settings.theme;
     });
@@ -51,13 +51,17 @@ export function App() {
   }, [data.settings.theme]);
 
   async function save() {
-    const result = await logbookApi.save(data);
+    const normalized = recalculateOdometers(data);
+    setData(normalized);
+    const result = await logbookApi.save(normalized);
     setMessage(result.ok ? `Uloženo: ${result.path}` : result.message ?? "Uložení se nezdařilo.");
     if (result.path) setFilePath(result.path);
   }
 
   async function saveAs() {
-    const result = await logbookApi.saveAs(data);
+    const normalized = recalculateOdometers(data);
+    setData(normalized);
+    const result = await logbookApi.saveAs(normalized);
     setMessage(result.ok ? `Uloženo jako: ${result.path}` : result.message ?? "Uložení se nezdařilo.");
     if (result.path) setFilePath(result.path);
   }
@@ -65,7 +69,7 @@ export function App() {
   async function openBook() {
     const state = await logbookApi.openBook();
     if (!state) return;
-    setData(state.data);
+    setData(recalculateOdometers(state.data));
     setFilePath(state.path);
     setMessage(`Otevřeno: ${state.path}`);
   }
@@ -139,7 +143,7 @@ export function App() {
         {view === "trips" && <Trips data={data} updateData={updateData} />}
         {view === "fuels" && <Fuels data={data} updateData={updateData} />}
         {view === "export" && <ExportPanel data={data} setData={setData} setMessage={setMessage} />}
-        {view === "settings" && <SettingsPanel data={data} updateData={updateData} filePath={filePath} setMessage={setMessage} />}
+        {view === "settings" && <SettingsPanel data={data} setData={setData} updateData={updateData} filePath={filePath} setMessage={setMessage} />}
       </main>
     </div>
   );
@@ -239,7 +243,7 @@ function Vehicles({ data, updateData }: { data: LogbookData; updateData: (update
   const edit = (vehicle: Vehicle) => setForm(vehicle);
   const save = () => {
     if (!form.spz.trim() || !form.brand.trim()) return alert("Vyplňte SPZ a značku vozidla.");
-    updateData((current) => ({ ...current, vehicles: current.vehicles.some((item) => item.id === form.id) ? current.vehicles.map((item) => item.id === form.id ? form : item) : [...current.vehicles, form] }));
+    updateData((current) => recalculateOdometers({ ...current, vehicles: current.vehicles.some((item) => item.id === form.id) ? current.vehicles.map((item) => item.id === form.id ? form : item) : [...current.vehicles, form] }, form.id));
     setForm(blankVehicle());
   };
   const remove = (id: string) => {
@@ -372,7 +376,7 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
     if (!isEditing && repeat.enabled && tripsToSave.length < 2) return alert("Pro opakování nastavte počet alespoň 2 jízdy.");
     const generatedErrors = collectGeneratedTripErrors(tripsToSave, data);
     if (generatedErrors.length) return alert(`Opakované jízdy nelze uložit: ${generatedErrors[0].message}`);
-    updateData((current) => ({ ...current, trips: current.trips.some((item) => item.id === form.id) ? current.trips.map((item) => item.id === form.id ? form : item) : [...current.trips, ...tripsToSave] }));
+    updateData((current) => recalculateOdometers({ ...current, trips: current.trips.some((item) => item.id === form.id) ? current.trips.map((item) => item.id === form.id ? form : item) : [...current.trips, ...tripsToSave] }));
     setRepeat({ enabled: false, frequency: "weekly", count: 2 });
     setReturnTrip(false);
     setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""));
@@ -465,13 +469,15 @@ function Fuels({ data, updateData }: { data: LogbookData; updateData: (updater: 
 
 function ExportPanel({ data, setData, setMessage }: { data: LogbookData; setData: (data: LogbookData) => void; setMessage: (message: string) => void }) {
   const run = async (kind: "xlsx" | "csv") => {
-    const result = kind === "xlsx" ? await logbookApi.exportXlsx(data) : await logbookApi.exportCsv(data);
+    const normalized = recalculateOdometers(data);
+    setData(normalized);
+    const result = kind === "xlsx" ? await logbookApi.exportXlsx(normalized) : await logbookApi.exportCsv(normalized);
     setMessage(result.ok ? `Export hotový: ${result.path}` : result.message ?? "Export se nezdařil.");
   };
   const importJson = async () => {
     const state = await logbookApi.importJson();
     if (!state) return;
-    setData(state.data);
+    setData(recalculateOdometers(state.data));
     setMessage(`Importováno: ${state.path}`);
   };
   return (
@@ -487,9 +493,11 @@ function ExportPanel({ data, setData, setMessage }: { data: LogbookData; setData
   );
 }
 
-function SettingsPanel({ data, updateData, filePath, setMessage }: { data: LogbookData; updateData: (updater: (current: LogbookData) => LogbookData) => void; filePath: string | null; setMessage: (message: string) => void }) {
+function SettingsPanel({ data, setData, updateData, filePath, setMessage }: { data: LogbookData; setData: (data: LogbookData) => void; updateData: (updater: (current: LogbookData) => LogbookData) => void; filePath: string | null; setMessage: (message: string) => void }) {
   const backup = async () => {
-    const result = await logbookApi.backupNow(data);
+    const normalized = recalculateOdometers(data);
+    setData(normalized);
+    const result = await logbookApi.backupNow(normalized);
     setMessage(result.ok ? `Záloha vytvořena: ${result.path}` : result.message ?? "Záloha se nezdařila.");
   };
   return (
