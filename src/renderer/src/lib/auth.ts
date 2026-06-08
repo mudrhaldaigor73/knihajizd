@@ -1,18 +1,16 @@
-const sessionKey = "moje-kniha-jizd:authenticated";
 const password = "knihajizd";
 
 export const usesDefaultPassword = true;
 
 export function isAuthenticated() {
-  return sessionStorage.getItem(sessionKey) === "yes";
+  return false;
 }
 
 export function signOut() {
-  sessionStorage.removeItem(sessionKey);
+  return;
 }
 
 export async function signIn(candidate: string) {
   if (candidate !== password) return false;
-  sessionStorage.setItem(sessionKey, "yes");
   return true;
 }
