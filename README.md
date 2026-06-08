@@ -29,6 +29,16 @@ Aplikace je offline. Instalace závislostí vyžaduje internet pouze jednorázov
 
 Webová verze běží bez serveru. Data se ukládají pouze v prohlížeči uživatele do `localStorage`; JSON záloha, CSV i Excel export se stahují lokálně.
 
+Web je chráněný přihlašovací stránkou. Výchozí heslo je:
+
+```text
+knihajizd
+```
+
+Pro ostrý provoz změňte heslo v souboru `src/renderer/src/lib/auth.ts`.
+
+Poznámka: toto je klientská ochrana pro jednoduché omezení přístupu. Pro silné řízení přístupu použijte Cloudflare Access.
+
 ```bash
 npm run web:dev
 ```
@@ -59,7 +69,7 @@ V režimu Cloudflare Workers/Assets se nepoužívá `_redirects`; fallback pro j
 ## Sestavení aplikace
 
 ```bash
-npm run build
+npm run desktop:build
 npm start
 ```
 

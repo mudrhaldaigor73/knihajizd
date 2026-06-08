@@ -1,9 +1,11 @@
-import { Car, Download, Fuel, Gauge, LayoutDashboard, Moon, Plus, Save, Search, Settings, Sun, Trash2, Upload } from "lucide-react";
+import { Car, Download, Fuel, Gauge, LayoutDashboard, LogOut, Moon, Plus, Save, Search, Settings, Sun, Trash2, Upload } from "lucide-react";
+import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { FuelRecord, LogbookData, Trip, Vehicle } from "./types";
 import { blankFuel, blankTrip, blankVehicle, emptyData, fuelTotal, getLastOdometer, summary, tripKm, vehicleName } from "./lib/data";
 import { validateAllTrips, validateTrip } from "./lib/validation";
 import { getLogbookApi } from "./lib/logbookApi";
+import { isAuthenticated, signIn, signOut, usesDefaultPassword } from "./lib/auth";
 
 type View = "dashboard" | "vehicles" | "trips" | "fuels" | "export" | "settings";
 
@@ -19,6 +21,7 @@ const nav: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
 const logbookApi = getLogbookApi();
 
 export function App() {
+  const [authenticated, setAuthenticated] = useState(isAuthenticated());
   const [data, setData] = useState<LogbookData>(emptyData());
   const [filePath, setFilePath] = useState<string | null>(null);
   const [view, setView] = useState<View>("dashboard");
@@ -68,6 +71,10 @@ export function App() {
 
   const updateData = (updater: (current: LogbookData) => LogbookData) => setData((current) => updater(current));
 
+  if (!authenticated) {
+    return <LoginScreen onAuthenticated={() => setAuthenticated(true)} />;
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -108,6 +115,9 @@ export function App() {
             <button className="primary" onClick={save}>
               <Save size={16} /> Uložit
             </button>
+            <button className="icon" onClick={() => { signOut(); setAuthenticated(false); }} title="Odhlásit">
+              <LogOut size={18} />
+            </button>
           </div>
         </header>
 
@@ -121,6 +131,40 @@ export function App() {
         {view === "settings" && <SettingsPanel data={data} updateData={updateData} filePath={filePath} setMessage={setMessage} />}
       </main>
     </div>
+  );
+}
+
+function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    if (await signIn(password)) {
+      onAuthenticated();
+      return;
+    }
+    setError("Nesprávné heslo.");
+  }
+
+  return (
+    <main className="login-page">
+      <section className="login-panel">
+        <div className="login-mark">✓</div>
+        <h1>Kniha jízd</h1>
+        <p>Přístup je chráněný heslem.</p>
+        <form onSubmit={submit}>
+          <label>
+            <span>Heslo</span>
+            <input autoFocus type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          </label>
+          {error && <div className="login-error">{error}</div>}
+          <button className="primary" type="submit">Přihlásit</button>
+        </form>
+        {usesDefaultPassword && <small>Výchozí heslo je <code>knihajizd</code>. Pro ostrý provoz ho změňte v souboru <code>auth.ts</code>.</small>}
+      </section>
+    </main>
   );
 }
 
