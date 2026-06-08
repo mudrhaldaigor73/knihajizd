@@ -18,6 +18,9 @@ const storageKey = "moje-kniha-jizd:data";
 const savedName = "Úložiště prohlížeče";
 const defaultJsonName = "kniha-jizd-data.json";
 
+const createBrowserId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+
 function normalize(data: Partial<LogbookData>): LogbookData {
   const defaults = emptyData();
   return {
@@ -25,6 +28,7 @@ function normalize(data: Partial<LogbookData>): LogbookData {
     ...data,
     vehicles: data.vehicles ?? [],
     drivers: data.drivers ?? [],
+    places: data.places ?? [...new Set((data.trips ?? []).flatMap((trip) => [trip.from, trip.to]).filter(Boolean))].map((name) => ({ id: createBrowserId(), name, note: "" })),
     trips: data.trips ?? [],
     fuels: data.fuels ?? [],
     settings: { ...defaults.settings, ...data.settings }

@@ -17,6 +17,12 @@ export interface Driver {
   note: string;
 }
 
+export interface Place {
+  id: string;
+  name: string;
+  note: string;
+}
+
 export interface Trip {
   id: string;
   date: string;
@@ -49,6 +55,7 @@ export interface LogbookData {
   version: 1;
   vehicles: Vehicle[];
   drivers: Driver[];
+  places: Place[];
   trips: Trip[];
   fuels: FuelRecord[];
   settings: {

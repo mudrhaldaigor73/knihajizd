@@ -34,6 +34,28 @@
       "note": "Servisní výjezdy"
     }
   ],
+  "places": [
+    {
+      "id": "place-domov",
+      "name": "Domov",
+      "note": "Výchozí místo"
+    },
+    {
+      "id": "place-praha",
+      "name": "Praha",
+      "note": "Kancelář"
+    },
+    {
+      "id": "place-brno",
+      "name": "Brno",
+      "note": "Pobočka"
+    },
+    {
+      "id": "place-mlada-boleslav",
+      "name": "Mladá Boleslav",
+      "note": "Dodavatel"
+    }
+  ],
   "trips": [
     {
       "id": "trip-001",

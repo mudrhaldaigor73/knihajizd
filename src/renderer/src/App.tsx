@@ -1,13 +1,13 @@
-import { Car, Download, Fuel, Gauge, LayoutDashboard, LogOut, Moon, Plus, Save, Search, Settings, Sun, Trash2, Upload, Users } from "lucide-react";
+import { Car, Download, Fuel, Gauge, LayoutDashboard, LogOut, MapPin, Moon, Plus, Save, Search, Settings, Sun, Trash2, Upload, Users } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { Driver, FuelRecord, LogbookData, Trip, Vehicle } from "./types";
-import { blankDriver, blankFuel, blankTrip, blankVehicle, createId, emptyData, fuelTotal, getLastOdometer, summary, tripKm, vehicleName } from "./lib/data";
+import type { Driver, FuelRecord, LogbookData, Place, Trip, Vehicle } from "./types";
+import { blankDriver, blankFuel, blankPlace, blankTrip, blankVehicle, createId, emptyData, fuelTotal, getLastOdometer, summary, tripKm, vehicleName } from "./lib/data";
 import { validateAllTrips, validateTrip } from "./lib/validation";
 import { getLogbookApi } from "./lib/logbookApi";
 import { isAuthenticated, signIn, signOut, usesDefaultPassword } from "./lib/auth";
 
-type View = "dashboard" | "vehicles" | "drivers" | "trips" | "fuels" | "export" | "settings";
+type View = "dashboard" | "vehicles" | "drivers" | "places" | "trips" | "fuels" | "export" | "settings";
 type RepeatFrequency = "daily" | "weekly" | "monthly";
 
 interface RepeatSettings {
@@ -20,6 +20,7 @@ const nav: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "vehicles", label: "Vozidla", icon: Car },
   { id: "drivers", label: "Řidiči", icon: Users },
+  { id: "places", label: "Místa", icon: MapPin },
   { id: "trips", label: "Jízdy", icon: Gauge },
   { id: "fuels", label: "Tankování", icon: Fuel },
   { id: "export", label: "Export", icon: Download },
@@ -134,6 +135,7 @@ export function App() {
         {view === "dashboard" && <Dashboard data={data} stats={stats} issues={issues.length} />}
         {view === "vehicles" && <Vehicles data={data} updateData={updateData} />}
         {view === "drivers" && <Drivers data={data} updateData={updateData} />}
+        {view === "places" && <Places data={data} updateData={updateData} />}
         {view === "trips" && <Trips data={data} updateData={updateData} />}
         {view === "fuels" && <Fuels data={data} updateData={updateData} />}
         {view === "export" && <ExportPanel data={data} setData={setData} setMessage={setMessage} />}
@@ -307,6 +309,44 @@ function Drivers({ data, updateData }: { data: LogbookData; updateData: (updater
   );
 }
 
+function Places({ data, updateData }: { data: LogbookData; updateData: (updater: (current: LogbookData) => LogbookData) => void }) {
+  const [form, setForm] = useState<Place>(blankPlace());
+  const edit = (place: Place) => setForm(place);
+  const save = () => {
+    const name = form.name.trim();
+    if (!name) return alert("Vyplňte název místa.");
+    if (data.places.some((place) => place.id !== form.id && place.name.trim().toLowerCase() === name.toLowerCase())) return alert("Toto místo už je zadané.");
+    const normalized = { ...form, name };
+    updateData((current) => ({ ...current, places: current.places.some((item) => item.id === form.id) ? current.places.map((item) => item.id === form.id ? normalized : item) : [...current.places, normalized] }));
+    setForm(blankPlace());
+  };
+  const remove = (place: Place) => {
+    if (!confirm("Smazat místo? Dříve uložené jízdy si ponechají text místa.")) return;
+    updateData((current) => ({ ...current, places: current.places.filter((item) => item.id !== place.id) }));
+    if (form.id === place.id) setForm(blankPlace());
+  };
+  return (
+    <section className="grid-two">
+      <div className="panel">
+        <div className="section-title"><h2>Místo</h2><span>{data.places.length} uložených míst</span></div>
+        <div className="form-grid">
+          <Input label="Název místa" value={form.name} onChange={(name) => setForm({ ...form, name })} />
+          <label className="full"><span>Poznámka</span><textarea value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
+        </div>
+        <div className="actions left">
+          <button className="primary" onClick={save}><Plus size={16} /> Uložit místo</button>
+          <button onClick={() => setForm(blankPlace())}>Vyčistit</button>
+        </div>
+      </div>
+      <div className="panel">
+        <div className="section-title"><h2>Seznam míst</h2><span>Nabízí se u polí Odkud a Kam</span></div>
+        {data.places.length === 0 && <p className="muted">Zatím není zadané žádné místo.</p>}
+        <div className="cards">{[...data.places].sort((a, b) => a.name.localeCompare(b.name, "cs-CZ")).map((place) => <article className="item" key={place.id}><div><strong>{place.name}</strong><span>{place.note || "Bez poznámky"}</span></div><button onClick={() => edit(place)}>Upravit</button><button className="danger" onClick={() => remove(place)} title="Smazat"><Trash2 size={16} /></button></article>)}</div>
+      </div>
+    </section>
+  );
+}
+
 function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: (current: LogbookData) => LogbookData) => void }) {
   const [form, setForm] = useState<Trip>(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""));
   const [repeat, setRepeat] = useState<RepeatSettings>({ enabled: false, frequency: "weekly", count: 2 });
@@ -348,8 +388,8 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
           <Input label="Čas příjezdu" type="time" value={form.arrivalTime} onChange={(arrivalTime) => setForm({ ...form, arrivalTime })} />
           <Select label="Vozidlo" value={form.vehicleId} onChange={(vehicleId) => setForm({ ...form, vehicleId, odometerStart: getLastOdometer(data, vehicleId), odometerEnd: getLastOdometer(data, vehicleId) })} options={data.vehicles.map((vehicle) => [vehicle.id, vehicleName(vehicle)])} />
           <Select label="Řidič" value={form.driver} onChange={(driver) => setForm({ ...form, driver })} options={driverOptions(data, form.driver)} />
-          <Input label="Odkud" value={form.from} onChange={(from) => setForm({ ...form, from })} />
-          <Input label="Kam" value={form.to} onChange={(to) => setForm({ ...form, to })} />
+          <PlaceInput label="Odkud" value={form.from} places={data.places} onChange={(from) => setForm({ ...form, from })} />
+          <PlaceInput label="Kam" value={form.to} places={data.places} onChange={(to) => setForm({ ...form, to })} />
           <Input label="Účel cesty" value={form.purpose} onChange={(purpose) => setForm({ ...form, purpose })} />
           <Select label="Typ cesty" value={form.type} onChange={(value) => setForm({ ...form, type: value as Trip["type"] })} options={[["služební", "služební"], ["soukromá", "soukromá"]]} />
           <Input label="Tachometr odjezd" type="number" value={form.odometerStart} onChange={(odometerStart) => setForm({ ...form, odometerStart: Number(odometerStart) })} />
@@ -468,6 +508,20 @@ function IssueList({ issues }: { issues: ReturnType<typeof validateTrip> }) {
 
 function Input({ label, value, onChange, type = "text" }: { label: string; value: string | number; type?: string; onChange: (value: string) => void }) {
   return <label><span>{label}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+function PlaceInput({ label, value, places, onChange }: { label: string; value: string; places: Place[]; onChange: (value: string) => void }) {
+  const listId = `places-${label.toLowerCase()}`;
+  const options = [...places].sort((a, b) => a.name.localeCompare(b.name, "cs-CZ"));
+  return (
+    <label>
+      <span>{label}</span>
+      <input list={listId} value={value} onChange={(event) => onChange(event.target.value)} />
+      <datalist id={listId}>
+        {options.map((place) => <option key={place.id} value={place.name} />)}
+      </datalist>
+    </label>
+  );
 }
 
 function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<[string, string]> }) {

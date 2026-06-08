@@ -7,6 +7,7 @@ export const defaultData = (): LogbookData => ({
   version: 1,
   vehicles: [],
   drivers: [],
+  places: [],
   trips: [],
   fuels: [],
   settings: {
@@ -23,10 +24,12 @@ function createId() {
 function normalizeData(parsed: Partial<LogbookData>): LogbookData {
   const defaults = defaultData();
   const inferredDrivers = [...new Set((parsed.trips ?? []).map((trip) => trip.driver).filter(Boolean))].slice(0, 3);
+  const inferredPlaces = [...new Set((parsed.trips ?? []).flatMap((trip) => [trip.from, trip.to]).filter(Boolean))];
   return {
     ...defaults,
     ...parsed,
     drivers: parsed.drivers ?? inferredDrivers.map((name) => ({ id: createId(), name, note: "" })),
+    places: parsed.places ?? inferredPlaces.map((name) => ({ id: createId(), name, note: "" })),
     settings: { ...defaults.settings, ...parsed.settings }
   };
 }

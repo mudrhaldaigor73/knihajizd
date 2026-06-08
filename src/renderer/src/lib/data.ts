@@ -1,4 +1,4 @@
-import type { Driver, FuelRecord, LogbookData, Trip, Vehicle } from "../types";
+import type { Driver, FuelRecord, LogbookData, Place, Trip, Vehicle } from "../types";
 
 export const createId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -7,6 +7,7 @@ export const emptyData = (): LogbookData => ({
   version: 1,
   vehicles: [],
   drivers: [],
+  places: [],
   trips: [],
   fuels: [],
   settings: {
@@ -17,6 +18,12 @@ export const emptyData = (): LogbookData => ({
 });
 
 export const blankDriver = (): Driver => ({
+  id: createId(),
+  name: "",
+  note: ""
+});
+
+export const blankPlace = (): Place => ({
   id: createId(),
   name: "",
   note: ""
