@@ -2,12 +2,19 @@ import { Car, Download, Fuel, Gauge, LayoutDashboard, LogOut, Moon, Plus, Save, 
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { Driver, FuelRecord, LogbookData, Trip, Vehicle } from "./types";
-import { blankDriver, blankFuel, blankTrip, blankVehicle, emptyData, fuelTotal, getLastOdometer, summary, tripKm, vehicleName } from "./lib/data";
+import { blankDriver, blankFuel, blankTrip, blankVehicle, createId, emptyData, fuelTotal, getLastOdometer, summary, tripKm, vehicleName } from "./lib/data";
 import { validateAllTrips, validateTrip } from "./lib/validation";
 import { getLogbookApi } from "./lib/logbookApi";
 import { isAuthenticated, signIn, signOut, usesDefaultPassword } from "./lib/auth";
 
 type View = "dashboard" | "vehicles" | "drivers" | "trips" | "fuels" | "export" | "settings";
+type RepeatFrequency = "daily" | "weekly" | "monthly";
+
+interface RepeatSettings {
+  enabled: boolean;
+  frequency: RepeatFrequency;
+  count: number;
+}
 
 const nav: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -302,9 +309,11 @@ function Drivers({ data, updateData }: { data: LogbookData; updateData: (updater
 
 function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: (current: LogbookData) => LogbookData) => void }) {
   const [form, setForm] = useState<Trip>(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""));
+  const [repeat, setRepeat] = useState<RepeatSettings>({ enabled: false, frequency: "weekly", count: 2 });
   const [query, setQuery] = useState("");
   const [type, setType] = useState("vše");
   const vehicles = new Map(data.vehicles.map((vehicle) => [vehicle.id, vehicle]));
+  const isEditing = data.trips.some((trip) => trip.id === form.id);
   const formIssues = validateTrip(form, { ...data, trips: data.trips.filter((trip) => trip.id !== form.id) });
 
   useEffect(() => {
@@ -317,7 +326,12 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
   });
   const save = () => {
     if (formIssues.some((issue) => issue.severity === "error")) return alert("Jízdu nelze uložit, opravte povinná pole a tachometr.");
-    updateData((current) => ({ ...current, trips: current.trips.some((item) => item.id === form.id) ? current.trips.map((item) => item.id === form.id ? form : item) : [...current.trips, form] }));
+    const tripsToSave = !isEditing && repeat.enabled ? repeatedTrips(form, repeat) : [form];
+    if (!isEditing && repeat.enabled && tripsToSave.length < 2) return alert("Pro opakování nastavte počet alespoň 2 jízdy.");
+    const generatedErrors = collectGeneratedTripErrors(tripsToSave, data);
+    if (generatedErrors.length) return alert(`Opakované jízdy nelze uložit: ${generatedErrors[0].message}`);
+    updateData((current) => ({ ...current, trips: current.trips.some((item) => item.id === form.id) ? current.trips.map((item) => item.id === form.id ? form : item) : [...current.trips, ...tripsToSave] }));
+    setRepeat({ enabled: false, frequency: "weekly", count: 2 });
     setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""));
   };
   const remove = (id: string) => {
@@ -341,9 +355,21 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
           <Input label="Tachometr odjezd" type="number" value={form.odometerStart} onChange={(odometerStart) => setForm({ ...form, odometerStart: Number(odometerStart) })} />
           <Input label="Tachometr příjezd" type="number" value={form.odometerEnd} onChange={(odometerEnd) => setForm({ ...form, odometerEnd: Number(odometerEnd) })} />
           <label><span>Poznámka</span><textarea value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
+          {!isEditing && (
+            <>
+              <label className="switch"><input type="checkbox" checked={repeat.enabled} onChange={(event) => setRepeat({ ...repeat, enabled: event.target.checked })} /><span>Opakovat jízdu</span></label>
+              {repeat.enabled && (
+                <>
+                  <Select label="Opakování" value={repeat.frequency} onChange={(frequency) => setRepeat({ ...repeat, frequency: frequency as RepeatFrequency })} options={[["daily", "denně"], ["weekly", "týdně"], ["monthly", "měsíčně"]]} />
+                  <Input label="Počet jízd celkem" type="number" value={repeat.count} onChange={(count) => setRepeat({ ...repeat, count: clampRepeatCount(count) })} />
+                  <label className="full"><span>Náhled opakování</span><input readOnly value={repeatPreview(form, repeat)} /></label>
+                </>
+              )}
+            </>
+          )}
         </div>
         <IssueList issues={formIssues} />
-        <div className="actions left"><button className="primary" onClick={save}><Plus size={16} /> Uložit jízdu</button><button onClick={() => setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""))}>Vyčistit</button></div>
+        <div className="actions left"><button className="primary" onClick={save}><Plus size={16} /> Uložit jízdu</button><button onClick={() => { setRepeat({ enabled: false, frequency: "weekly", count: 2 }); setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? "")); }}>Vyčistit</button></div>
       </div>
       <div className="panel">
         <div className="toolbar"><div className="search"><Search size={16} /><input placeholder="Hledat podle trasy, řidiče, účelu nebo vozidla" value={query} onChange={(event) => setQuery(event.target.value)} /></div><select value={type} onChange={(event) => setType(event.target.value)}><option>vše</option><option>služební</option><option>soukromá</option></select></div>
@@ -452,4 +478,76 @@ function driverOptions(data: LogbookData, currentDriver: string): Array<[string,
   const options = data.drivers.map((driver) => [driver.name, driver.name] as [string, string]);
   if (currentDriver && !options.some(([value]) => value === currentDriver)) options.push([currentDriver, currentDriver]);
   return options;
+}
+
+function clampRepeatCount(value: string) {
+  const count = Number(value);
+  if (!Number.isFinite(count)) return 2;
+  return Math.min(60, Math.max(2, Math.floor(count)));
+}
+
+function repeatedTrips(source: Trip, repeat: RepeatSettings): Trip[] {
+  const count = clampRepeatCount(String(repeat.count));
+  const km = tripKm(source);
+  return Array.from({ length: count }, (_, index) => {
+    const odometerStart = Number(source.odometerStart) + km * index;
+    return {
+      ...source,
+      id: index === 0 ? source.id : createId(),
+      date: addRepeatDate(source.date, repeat.frequency, index),
+      odometerStart,
+      odometerEnd: odometerStart + km
+    };
+  });
+}
+
+function collectGeneratedTripErrors(trips: Trip[], data: LogbookData) {
+  let acceptedTrips = [...data.trips];
+  const errors = [];
+  for (const trip of trips) {
+    const tripErrors = validateTrip(trip, { ...data, trips: acceptedTrips }).filter((issue) => issue.severity === "error");
+    if (tripErrors.length) errors.push(...tripErrors);
+    acceptedTrips = [...acceptedTrips, trip];
+  }
+  return errors;
+}
+
+function repeatPreview(source: Trip, repeat: RepeatSettings) {
+  const trips = repeatedTrips(source, repeat);
+  const first = trips[0]?.date ?? source.date;
+  const last = trips.at(-1)?.date ?? source.date;
+  const km = tripKm(source);
+  return `${trips.length} jízd, ${first} až ${last}, celkem ${trips.length * km} km`;
+}
+
+function addRepeatDate(date: string, frequency: RepeatFrequency, offset: number) {
+  if (frequency === "daily") return addDays(date, offset);
+  if (frequency === "weekly") return addDays(date, offset * 7);
+  return addMonths(date, offset);
+}
+
+function addDays(date: string, days: number) {
+  const { year, month, day } = parseDate(date);
+  return formatDate(new Date(year, month - 1, day + days));
+}
+
+function addMonths(date: string, months: number) {
+  const { year, month, day } = parseDate(date);
+  const targetMonthIndex = month - 1 + months;
+  const targetYear = year + Math.floor(targetMonthIndex / 12);
+  const normalizedMonthIndex = ((targetMonthIndex % 12) + 12) % 12;
+  const maxDay = new Date(targetYear, normalizedMonthIndex + 1, 0).getDate();
+  return formatDate(new Date(targetYear, normalizedMonthIndex, Math.min(day, maxDay)));
+}
+
+function parseDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return { year, month, day };
+}
+
+function formatDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
