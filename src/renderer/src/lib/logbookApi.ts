@@ -16,6 +16,7 @@ export interface LogbookApi {
 
 const storageKey = "moje-kniha-jizd:data";
 const savedName = "Úložiště prohlížeče";
+const defaultJsonName = "kniha-jizd-data.json";
 
 function normalize(data: Partial<LogbookData>): LogbookData {
   const defaults = emptyData();
@@ -23,6 +24,7 @@ function normalize(data: Partial<LogbookData>): LogbookData {
     ...defaults,
     ...data,
     vehicles: data.vehicles ?? [],
+    drivers: data.drivers ?? [],
     trips: data.trips ?? [],
     fuels: data.fuels ?? [],
     settings: { ...defaults.settings, ...data.settings }
@@ -37,6 +39,32 @@ function readBrowserData(): LogbookData {
 
 function writeBrowserData(data: LogbookData) {
   localStorage.setItem(storageKey, JSON.stringify(data));
+}
+
+function jsonBlob(data: LogbookData) {
+  return new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+}
+
+async function saveJsonWithPicker(data: LogbookData, suggestedName = defaultJsonName): Promise<SaveResult> {
+  if (!window.showSaveFilePicker) {
+    downloadJson(data, suggestedName);
+    return { ok: true, path: suggestedName };
+  }
+
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName,
+      types: [{ description: "Kniha jízd JSON", accept: { "application/json": [".json"] } }]
+    });
+    const writable = await handle.createWritable();
+    await writable.write(jsonBlob(data));
+    await writable.close();
+    return { ok: true, path: suggestedName };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return { ok: false, message: "Uložení bylo zrušeno." };
+    downloadJson(data, suggestedName);
+    return { ok: true, path: suggestedName };
+  }
 }
 
 function pickJsonFile(): Promise<FileState | null> {
@@ -71,12 +99,12 @@ const browserApi: LogbookApi = {
   openBook: pickJsonFile,
   async save(data) {
     writeBrowserData(data);
-    return { ok: true, path: savedName };
+    downloadJson(data, defaultJsonName);
+    return { ok: true, path: defaultJsonName };
   },
   async saveAs(data) {
     writeBrowserData(data);
-    downloadJson(data);
-    return { ok: true, path: "kniha-jizd-data.json" };
+    return await saveJsonWithPicker(data);
   },
   async backupNow(data) {
     writeBrowserData(data);
