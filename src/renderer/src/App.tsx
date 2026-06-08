@@ -357,6 +357,8 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
   const [returnTrip, setReturnTrip] = useState(false);
   const [query, setQuery] = useState("");
   const [type, setType] = useState("vše");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const vehicles = new Map(data.vehicles.map((vehicle) => [vehicle.id, vehicle]));
   const isEditing = data.trips.some((trip) => trip.id === form.id);
   const formIssues = validateTrip(form, { ...data, trips: data.trips.filter((trip) => trip.id !== form.id) });
@@ -367,7 +369,7 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
 
   const filtered = data.trips.filter((trip) => {
     const text = `${trip.date} ${trip.driver} ${trip.from} ${trip.to} ${trip.purpose} ${vehicleName(vehicles.get(trip.vehicleId))}`.toLowerCase();
-    return text.includes(query.toLowerCase()) && (type === "vše" || trip.type === type);
+    return text.includes(query.toLowerCase()) && (type === "vše" || trip.type === type) && (!dateFrom || trip.date >= dateFrom) && (!dateTo || trip.date <= dateTo);
   });
   const save = () => {
     if (formIssues.some((issue) => issue.severity === "error")) return alert("Jízdu nelze uložit, opravte povinná pole a tachometr.");
@@ -420,10 +422,10 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
         <div className="actions left"><button className="primary" onClick={save}><Plus size={16} /> Uložit jízdu</button><button onClick={() => { setRepeat({ enabled: false, frequency: "weekly", count: 2 }); setReturnTrip(false); setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? "")); }}>Vyčistit</button></div>
       </div>
       <div className="panel">
-        <div className="toolbar"><div className="search"><Search size={16} /><input placeholder="Hledat podle trasy, řidiče, účelu nebo vozidla" value={query} onChange={(event) => setQuery(event.target.value)} /></div><select value={type} onChange={(event) => setType(event.target.value)}><option>vše</option><option>služební</option><option>soukromá</option></select></div>
+        <div className="toolbar"><div className="search"><Search size={16} /><input placeholder="Hledat podle trasy, řidiče, účelu nebo vozidla" value={query} onChange={(event) => setQuery(event.target.value)} /></div><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} title="Datum od" /><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} title="Datum do" /><select value={type} onChange={(event) => setType(event.target.value)}><option>vše</option><option>služební</option><option>soukromá</option></select></div>
         <table>
-          <thead><tr><th>Datum</th><th>Čas</th><th>Vozidlo</th><th>Řidič</th><th>Trasa</th><th>Typ</th><th>Km</th><th></th></tr></thead>
-          <tbody>{filtered.sort((a, b) => `${b.date} ${b.departureTime}`.localeCompare(`${a.date} ${a.departureTime}`)).map((trip) => <tr key={trip.id}><td>{trip.date}</td><td>{trip.departureTime}-{trip.arrivalTime}</td><td>{vehicleName(vehicles.get(trip.vehicleId))}</td><td>{trip.driver}</td><td>{trip.from} - {trip.to}</td><td>{trip.type}</td><td>{tripKm(trip)}</td><td className="row-actions"><button onClick={() => setForm(trip)}>Upravit</button><button className="danger" onClick={() => remove(trip.id)} title="Smazat"><Trash2 size={16} /></button></td></tr>)}</tbody>
+          <thead><tr><th>Datum</th><th>Čas</th><th>Vozidlo</th><th>Řidič</th><th>Trasa</th><th>Tachometr konec</th><th>Typ</th><th>Km</th><th></th></tr></thead>
+          <tbody>{filtered.sort((a, b) => `${b.date} ${b.departureTime}`.localeCompare(`${a.date} ${a.departureTime}`)).map((trip) => <tr key={trip.id}><td>{trip.date}</td><td>{trip.departureTime}-{trip.arrivalTime}</td><td>{vehicleName(vehicles.get(trip.vehicleId))}</td><td>{trip.driver}</td><td>{trip.from} - {trip.to}</td><td>{trip.odometerEnd}</td><td>{trip.type}</td><td>{tripKm(trip)}</td><td className="row-actions"><button onClick={() => setForm(trip)}>Upravit</button><button className="danger" onClick={() => remove(trip.id)} title="Smazat"><Trash2 size={16} /></button></td></tr>)}</tbody>
         </table>
       </div>
     </section>
