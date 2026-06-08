@@ -350,6 +350,7 @@ function Places({ data, updateData }: { data: LogbookData; updateData: (updater:
 function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: (current: LogbookData) => LogbookData) => void }) {
   const [form, setForm] = useState<Trip>(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""));
   const [repeat, setRepeat] = useState<RepeatSettings>({ enabled: false, frequency: "weekly", count: 2 });
+  const [returnTrip, setReturnTrip] = useState(false);
   const [query, setQuery] = useState("");
   const [type, setType] = useState("vše");
   const vehicles = new Map(data.vehicles.map((vehicle) => [vehicle.id, vehicle]));
@@ -366,12 +367,14 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
   });
   const save = () => {
     if (formIssues.some((issue) => issue.severity === "error")) return alert("Jízdu nelze uložit, opravte povinná pole a tachometr.");
-    const tripsToSave = !isEditing && repeat.enabled ? repeatedTrips(form, repeat) : [form];
+    const baseTrips = !isEditing && repeat.enabled ? repeatedTrips(form, repeat) : [form];
+    const tripsToSave = !isEditing && returnTrip ? withReturnTrips(baseTrips) : baseTrips;
     if (!isEditing && repeat.enabled && tripsToSave.length < 2) return alert("Pro opakování nastavte počet alespoň 2 jízdy.");
     const generatedErrors = collectGeneratedTripErrors(tripsToSave, data);
     if (generatedErrors.length) return alert(`Opakované jízdy nelze uložit: ${generatedErrors[0].message}`);
     updateData((current) => ({ ...current, trips: current.trips.some((item) => item.id === form.id) ? current.trips.map((item) => item.id === form.id ? form : item) : [...current.trips, ...tripsToSave] }));
     setRepeat({ enabled: false, frequency: "weekly", count: 2 });
+    setReturnTrip(false);
     setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""));
   };
   const remove = (id: string) => {
@@ -397,19 +400,20 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
           <label><span>Poznámka</span><textarea value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
           {!isEditing && (
             <>
+              <label className="switch"><input type="checkbox" checked={returnTrip} onChange={(event) => setReturnTrip(event.target.checked)} /><span>Zpět</span></label>
               <label className="switch"><input type="checkbox" checked={repeat.enabled} onChange={(event) => setRepeat({ ...repeat, enabled: event.target.checked })} /><span>Opakovat jízdu</span></label>
               {repeat.enabled && (
                 <>
                   <Select label="Opakování" value={repeat.frequency} onChange={(frequency) => setRepeat({ ...repeat, frequency: frequency as RepeatFrequency })} options={[["daily", "denně"], ["weekly", "týdně"], ["monthly", "měsíčně"]]} />
                   <Input label="Počet jízd celkem" type="number" value={repeat.count} onChange={(count) => setRepeat({ ...repeat, count: clampRepeatCount(count) })} />
-                  <label className="full"><span>Náhled opakování</span><input readOnly value={repeatPreview(form, repeat)} /></label>
+                  <label className="full"><span>Náhled opakování</span><input readOnly value={repeatPreview(form, repeat, returnTrip)} /></label>
                 </>
               )}
             </>
           )}
         </div>
         <IssueList issues={formIssues} />
-        <div className="actions left"><button className="primary" onClick={save}><Plus size={16} /> Uložit jízdu</button><button onClick={() => { setRepeat({ enabled: false, frequency: "weekly", count: 2 }); setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? "")); }}>Vyčistit</button></div>
+        <div className="actions left"><button className="primary" onClick={save}><Plus size={16} /> Uložit jízdu</button><button onClick={() => { setRepeat({ enabled: false, frequency: "weekly", count: 2 }); setReturnTrip(false); setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? "")); }}>Vyčistit</button></div>
       </div>
       <div className="panel">
         <div className="toolbar"><div className="search"><Search size={16} /><input placeholder="Hledat podle trasy, řidiče, účelu nebo vozidla" value={query} onChange={(event) => setQuery(event.target.value)} /></div><select value={type} onChange={(event) => setType(event.target.value)}><option>vše</option><option>služební</option><option>soukromá</option></select></div>
@@ -555,6 +559,36 @@ function repeatedTrips(source: Trip, repeat: RepeatSettings): Trip[] {
   });
 }
 
+function withReturnTrips(trips: Trip[]): Trip[] {
+  if (!trips.length) return [];
+  let nextOdometerStart = Number(trips[0].odometerStart);
+  return trips.flatMap((trip) => {
+    const km = tripKm(trip);
+    const outbound = {
+      ...trip,
+      odometerStart: nextOdometerStart,
+      odometerEnd: nextOdometerStart + km
+    };
+    const inbound = createReturnTrip(outbound);
+    nextOdometerStart = Number(inbound.odometerEnd);
+    return [outbound, inbound];
+  });
+}
+
+function createReturnTrip(trip: Trip): Trip {
+  const km = tripKm(trip);
+  return {
+    ...trip,
+    id: createId(),
+    departureTime: trip.arrivalTime,
+    arrivalTime: addMinutesToTime(trip.arrivalTime, tripDurationMinutes(trip)),
+    from: trip.to,
+    to: trip.from,
+    odometerStart: Number(trip.odometerEnd),
+    odometerEnd: Number(trip.odometerEnd) + km
+  };
+}
+
 function collectGeneratedTripErrors(trips: Trip[], data: LogbookData) {
   let acceptedTrips = [...data.trips];
   const errors = [];
@@ -566,12 +600,13 @@ function collectGeneratedTripErrors(trips: Trip[], data: LogbookData) {
   return errors;
 }
 
-function repeatPreview(source: Trip, repeat: RepeatSettings) {
+function repeatPreview(source: Trip, repeat: RepeatSettings, includeReturnTrip = false) {
   const trips = repeatedTrips(source, repeat);
+  const tripCount = includeReturnTrip ? trips.length * 2 : trips.length;
   const first = trips[0]?.date ?? source.date;
   const last = trips.at(-1)?.date ?? source.date;
   const km = tripKm(source);
-  return `${trips.length} jízd, ${first} až ${last}, celkem ${trips.length * km} km`;
+  return `${tripCount} jízd, ${first} až ${last}, celkem ${tripCount * km} km`;
 }
 
 function addRepeatDate(date: string, frequency: RepeatFrequency, offset: number) {
@@ -604,4 +639,20 @@ function formatDate(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function tripDurationMinutes(trip: Trip) {
+  return Math.max(1, timeToMinutes(trip.arrivalTime) - timeToMinutes(trip.departureTime));
+}
+
+function timeToMinutes(time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function addMinutesToTime(time: string, minutesToAdd: number) {
+  const totalMinutes = timeToMinutes(time) + minutesToAdd;
+  const hours = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
