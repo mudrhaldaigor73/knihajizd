@@ -1,11 +1,11 @@
 import { Car, Download, Fuel, Gauge, LayoutDashboard, LogOut, MapPin, Moon, Plus, Save, Search, Settings, Sun, Trash2, Upload, Users } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { Driver, FuelRecord, LogbookData, Place, Trip, Vehicle } from "./types";
-import { blankDriver, blankFuel, blankPlace, blankTrip, blankVehicle, createId, emptyData, fuelTotal, getLastOdometer, recalculateOdometers, summary, tripKm, vehicleName } from "./lib/data";
+import type { Driver, FuelRecord, LogbookData, Place, Trip, Vehicle } from "../../shared/types";
+import { autoFillOdometerStart, blankDriver, blankFuel, blankPlace, blankTrip, blankVehicle, createId, emptyData, fuelTotal, getLastOdometer, recalculateOdometers, summary, tripKm, vehicleName } from "./lib/data";
 import { validateAllTrips, validateTrip } from "./lib/validation";
 import { getLogbookApi } from "./lib/logbookApi";
-import { isAuthenticated, signIn, signOut, usesDefaultPassword } from "./lib/auth";
+import { isAuthenticated, signIn, signOut } from "./lib/auth";
 
 type View = "dashboard" | "vehicles" | "drivers" | "places" | "trips" | "fuels" | "export" | "settings";
 type RepeatFrequency = "daily" | "weekly" | "monthly";
@@ -39,11 +39,14 @@ export function App() {
   const issues = useMemo(() => validateAllTrips(data), [data]);
 
   useEffect(() => {
-    void logbookApi.loadInitial().then((state) => {
-      setData(recalculateOdometers(state.data));
-      setFilePath(state.path);
-      document.documentElement.dataset.theme = state.data.settings.theme;
-    });
+    void logbookApi
+      .loadInitial()
+      .then((state) => {
+        setData(state.data);
+        setFilePath(state.path);
+        document.documentElement.dataset.theme = state.data.settings.theme;
+      })
+      .catch(() => setMessage("Načtení dat se nezdařilo. Zkuste knihu otevřít ručně přes Otevřít."));
   }, []);
 
   useEffect(() => {
@@ -51,27 +54,35 @@ export function App() {
   }, [data.settings.theme]);
 
   async function save() {
-    const normalized = recalculateOdometers(data);
-    setData(normalized);
-    const result = await logbookApi.save(normalized);
-    setMessage(result.ok ? `Uloženo: ${result.path}` : result.message ?? "Uložení se nezdařilo.");
-    if (result.path) setFilePath(result.path);
+    try {
+      const result = await logbookApi.save(data);
+      setMessage(result.ok ? `Uloženo: ${result.path}` : result.message ?? "Uložení se nezdařilo.");
+      if (result.ok && result.path) setFilePath(result.path);
+    } catch {
+      setMessage("Uložení se nezdařilo.");
+    }
   }
 
   async function saveAs() {
-    const normalized = recalculateOdometers(data);
-    setData(normalized);
-    const result = await logbookApi.saveAs(normalized);
-    setMessage(result.ok ? `Uloženo jako: ${result.path}` : result.message ?? "Uložení se nezdařilo.");
-    if (result.path) setFilePath(result.path);
+    try {
+      const result = await logbookApi.saveAs(data);
+      setMessage(result.ok ? `Uloženo jako: ${result.path}` : result.message ?? "Uložení se nezdařilo.");
+      if (result.ok && result.path) setFilePath(result.path);
+    } catch {
+      setMessage("Uložení se nezdařilo.");
+    }
   }
 
   async function openBook() {
-    const state = await logbookApi.openBook();
-    if (!state) return;
-    setData(recalculateOdometers(state.data));
-    setFilePath(state.path);
-    setMessage(`Otevřeno: ${state.path}`);
+    try {
+      const state = await logbookApi.openBook();
+      if (!state) return;
+      setData(state.data);
+      setFilePath(state.path);
+      setMessage(`Otevřeno: ${state.path}`);
+    } catch {
+      setMessage("Soubor se nepodařilo načíst. Zkontrolujte, že jde o platný JSON knihy jízd.");
+    }
   }
 
   async function newBook() {
@@ -177,7 +188,6 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }) {
           {error && <div className="login-error">{error}</div>}
           <button className="primary" type="submit">Přihlásit</button>
         </form>
-        {usesDefaultPassword && <small>Výchozí heslo je <code>knihajizd</code>. Pro ostrý provoz ho změňte v souboru <code>auth.ts</code>.</small>}
       </section>
     </main>
   );
@@ -243,7 +253,7 @@ function Vehicles({ data, updateData }: { data: LogbookData; updateData: (update
   const edit = (vehicle: Vehicle) => setForm(vehicle);
   const save = () => {
     if (!form.spz.trim() || !form.brand.trim()) return alert("Vyplňte SPZ a značku vozidla.");
-    updateData((current) => recalculateOdometers({ ...current, vehicles: current.vehicles.some((item) => item.id === form.id) ? current.vehicles.map((item) => item.id === form.id ? form : item) : [...current.vehicles, form] }, form.id));
+    updateData((current) => ({ ...current, vehicles: current.vehicles.some((item) => item.id === form.id) ? current.vehicles.map((item) => item.id === form.id ? form : item) : [...current.vehicles, form] }));
     setForm(blankVehicle());
   };
   const remove = (id: string) => {
@@ -359,7 +369,12 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
   const [type, setType] = useState("vše");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [vehicleFilter, setVehicleFilter] = useState("vše");
+  const [driverFilter, setDriverFilter] = useState("vše");
   const vehicles = new Map(data.vehicles.map((vehicle) => [vehicle.id, vehicle]));
+  const driverNames = [...new Set([...data.drivers.map((driver) => driver.name), ...data.trips.map((trip) => trip.driver)])]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "cs-CZ"));
   const isEditing = data.trips.some((trip) => trip.id === form.id);
   const formIssues = validateTrip(form, { ...data, trips: data.trips.filter((trip) => trip.id !== form.id) });
 
@@ -369,16 +384,25 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
 
   const filtered = data.trips.filter((trip) => {
     const text = `${trip.date} ${trip.driver} ${trip.from} ${trip.to} ${trip.purpose} ${vehicleName(vehicles.get(trip.vehicleId))}`.toLowerCase();
-    return text.includes(query.toLowerCase()) && (type === "vše" || trip.type === type) && (!dateFrom || trip.date >= dateFrom) && (!dateTo || trip.date <= dateTo);
+    return (
+      text.includes(query.toLowerCase()) &&
+      (type === "vše" || trip.type === type) &&
+      (vehicleFilter === "vše" || trip.vehicleId === vehicleFilter) &&
+      (driverFilter === "vše" || trip.driver === driverFilter) &&
+      (!dateFrom || trip.date >= dateFrom) &&
+      (!dateTo || trip.date <= dateTo)
+    );
   });
   const save = () => {
-    if (formIssues.some((issue) => issue.severity === "error")) return alert("Jízdu nelze uložit, opravte povinná pole a tachometr.");
-    const baseTrips = !isEditing && repeat.enabled ? repeatedTrips(form, repeat) : [form];
+    const prepared = autoFillOdometerStart(form, data);
+    const preparedIssues = validateTrip(prepared, { ...data, trips: data.trips.filter((trip) => trip.id !== prepared.id) });
+    if (preparedIssues.some((issue) => issue.severity === "error")) return alert("Jízdu nelze uložit, opravte povinná pole a tachometr.");
+    const baseTrips = !isEditing && repeat.enabled ? repeatedTrips(prepared, repeat) : [prepared];
     const tripsToSave = !isEditing && returnTrip ? withReturnTrips(baseTrips) : baseTrips;
     if (!isEditing && repeat.enabled && tripsToSave.length < 2) return alert("Pro opakování nastavte počet alespoň 2 jízdy.");
     const generatedErrors = collectGeneratedTripErrors(tripsToSave, data);
     if (generatedErrors.length) return alert(`Opakované jízdy nelze uložit: ${generatedErrors[0].message}`);
-    updateData((current) => recalculateOdometers({ ...current, trips: current.trips.some((item) => item.id === form.id) ? current.trips.map((item) => item.id === form.id ? form : item) : [...current.trips, ...tripsToSave] }));
+    updateData((current) => ({ ...current, trips: current.trips.some((item) => item.id === prepared.id) ? current.trips.map((item) => item.id === prepared.id ? prepared : item) : [...current.trips, ...tripsToSave] }));
     setRepeat({ enabled: false, frequency: "weekly", count: 2 });
     setReturnTrip(false);
     setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""));
@@ -422,7 +446,7 @@ function Trips({ data, updateData }: { data: LogbookData; updateData: (updater: 
         <div className="actions left"><button className="primary" onClick={save}><Plus size={16} /> Uložit jízdu</button><button onClick={() => { setRepeat({ enabled: false, frequency: "weekly", count: 2 }); setReturnTrip(false); setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? "")); }}>Vyčistit</button></div>
       </div>
       <div className="panel">
-        <div className="toolbar"><div className="search"><Search size={16} /><input placeholder="Hledat podle trasy, řidiče, účelu nebo vozidla" value={query} onChange={(event) => setQuery(event.target.value)} /></div><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} title="Datum od" /><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} title="Datum do" /><select value={type} onChange={(event) => setType(event.target.value)}><option>vše</option><option>služební</option><option>soukromá</option></select></div>
+        <div className="toolbar"><div className="search"><Search size={16} /><input placeholder="Hledat podle trasy, řidiče, účelu nebo vozidla" value={query} onChange={(event) => setQuery(event.target.value)} /></div><input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} title="Datum od" /><input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} title="Datum do" /><select value={vehicleFilter} onChange={(event) => setVehicleFilter(event.target.value)} title="Filtr vozidla"><option value="vše">všechna vozidla</option>{data.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicleName(vehicle)}</option>)}</select><select value={driverFilter} onChange={(event) => setDriverFilter(event.target.value)} title="Filtr řidiče"><option value="vše">všichni řidiči</option>{driverNames.map((name) => <option key={name} value={name}>{name}</option>)}</select><select value={type} onChange={(event) => setType(event.target.value)}><option>vše</option><option>služební</option><option>soukromá</option></select></div>
         <table>
           <thead><tr><th>Datum</th><th>Čas</th><th>Vozidlo</th><th>Řidič</th><th>Trasa</th><th>Tachometr konec</th><th>Typ</th><th>Km</th><th></th></tr></thead>
           <tbody>{filtered.sort((a, b) => `${b.date} ${b.departureTime}`.localeCompare(`${a.date} ${a.departureTime}`)).map((trip) => <tr key={trip.id}><td>{trip.date}</td><td>{trip.departureTime}-{trip.arrivalTime}</td><td>{vehicleName(vehicles.get(trip.vehicleId))}</td><td>{trip.driver}</td><td>{trip.from} - {trip.to}</td><td>{trip.odometerEnd}</td><td>{trip.type}</td><td>{tripKm(trip)}</td><td className="row-actions"><button onClick={() => setForm(trip)}>Upravit</button><button className="danger" onClick={() => remove(trip.id)} title="Smazat"><Trash2 size={16} /></button></td></tr>)}</tbody>
@@ -471,16 +495,22 @@ function Fuels({ data, updateData }: { data: LogbookData; updateData: (updater: 
 
 function ExportPanel({ data, setData, setMessage }: { data: LogbookData; setData: (data: LogbookData) => void; setMessage: (message: string) => void }) {
   const run = async (kind: "xlsx" | "csv") => {
-    const normalized = recalculateOdometers(data);
-    setData(normalized);
-    const result = kind === "xlsx" ? await logbookApi.exportXlsx(normalized) : await logbookApi.exportCsv(normalized);
-    setMessage(result.ok ? `Export hotový: ${result.path}` : result.message ?? "Export se nezdařil.");
+    try {
+      const result = kind === "xlsx" ? await logbookApi.exportXlsx(data) : await logbookApi.exportCsv(data);
+      setMessage(result.ok ? `Export hotový: ${result.path}` : result.message ?? "Export se nezdařil.");
+    } catch {
+      setMessage("Export se nezdařil.");
+    }
   };
   const importJson = async () => {
-    const state = await logbookApi.importJson();
-    if (!state) return;
-    setData(recalculateOdometers(state.data));
-    setMessage(`Importováno: ${state.path}`);
+    try {
+      const state = await logbookApi.importJson();
+      if (!state) return;
+      setData(state.data);
+      setMessage(`Importováno: ${state.path}`);
+    } catch {
+      setMessage("Import se nezdařil. Zkontrolujte, že jde o platný JSON knihy jízd.");
+    }
   };
   return (
     <section className="panel export-panel">
@@ -497,10 +527,17 @@ function ExportPanel({ data, setData, setMessage }: { data: LogbookData; setData
 
 function SettingsPanel({ data, setData, updateData, filePath, setMessage }: { data: LogbookData; setData: (data: LogbookData) => void; updateData: (updater: (current: LogbookData) => LogbookData) => void; filePath: string | null; setMessage: (message: string) => void }) {
   const backup = async () => {
-    const normalized = recalculateOdometers(data);
-    setData(normalized);
-    const result = await logbookApi.backupNow(normalized);
-    setMessage(result.ok ? `Záloha vytvořena: ${result.path}` : result.message ?? "Záloha se nezdařila.");
+    try {
+      const result = await logbookApi.backupNow(data);
+      setMessage(result.ok ? `Záloha vytvořena: ${result.path}` : result.message ?? "Záloha se nezdařila.");
+    } catch {
+      setMessage("Záloha se nezdařila.");
+    }
+  };
+  const recalculate = () => {
+    if (!confirm("Přepsat stavy tachometru u všech jízd podle návaznosti? Ručně zadané hodnoty budou nahrazeny dopočtenými.")) return;
+    setData(recalculateOdometers(data));
+    setMessage("Stavy tachometru byly přepočítány podle návaznosti jízd.");
   };
   return (
     <section className="panel settings-panel">
@@ -510,6 +547,7 @@ function SettingsPanel({ data, setData, updateData, filePath, setMessage }: { da
         <label className="switch"><input type="checkbox" checked={data.settings.autoBackup} onChange={(event) => updateData((current) => ({ ...current, settings: { ...current.settings, autoBackup: event.target.checked } }))} /><span>Automatické zálohování před uložením</span></label>
         <Input label="Limit podezřelých km za den" type="number" value={data.settings.highKmPerDayThreshold} onChange={(highKmPerDayThreshold) => updateData((current) => ({ ...current, settings: { ...current.settings, highKmPerDayThreshold: Number(highKmPerDayThreshold) } }))} />
         <button onClick={backup}>Vytvořit ruční zálohu</button>
+        <button onClick={recalculate}>Přepočítat tachometry podle návaznosti</button>
       </div>
     </section>
   );

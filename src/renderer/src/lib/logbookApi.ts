@@ -1,4 +1,4 @@
-import type { FileState, LogbookData, SaveResult } from "../types";
+import type { FileState, LogbookData, SaveResult } from "../../../shared/types";
 import { emptyData } from "./data";
 import { downloadCsv, downloadJson, downloadXlsx } from "./browserExport";
 
@@ -41,8 +41,15 @@ function readBrowserData(): LogbookData {
   return normalize(JSON.parse(raw) as Partial<LogbookData>);
 }
 
-function writeBrowserData(data: LogbookData) {
-  localStorage.setItem(storageKey, JSON.stringify(data));
+const storageFullMessage = "Data se nepodařilo uložit do prohlížeče (úložiště je plné nebo blokované). Stáhněte si JSON zálohu, ať o data nepřijdete.";
+
+function writeBrowserData(data: LogbookData): boolean {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function jsonBlob(data: LogbookData) {
@@ -102,19 +109,20 @@ const browserApi: LogbookApi = {
   },
   openBook: pickJsonFile,
   async save(data) {
-    writeBrowserData(data);
+    const stored = writeBrowserData(data);
     downloadJson(data, defaultJsonName);
-    return { ok: true, path: defaultJsonName };
+    return stored ? { ok: true, path: defaultJsonName } : { ok: false, message: storageFullMessage };
   },
   async saveAs(data) {
-    writeBrowserData(data);
-    return await saveJsonWithPicker(data);
+    const stored = writeBrowserData(data);
+    const result = await saveJsonWithPicker(data);
+    return stored ? result : { ok: false, message: storageFullMessage };
   },
   async backupNow(data) {
-    writeBrowserData(data);
+    const stored = writeBrowserData(data);
     const filename = `kniha-jizd-zaloha-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
     downloadJson(data, filename);
-    return { ok: true, path: filename };
+    return stored ? { ok: true, path: filename } : { ok: false, message: storageFullMessage };
   },
   async exportXlsx(data) {
     await downloadXlsx(data);

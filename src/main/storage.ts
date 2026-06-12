@@ -23,7 +23,7 @@ function createId() {
 
 function normalizeData(parsed: Partial<LogbookData>): LogbookData {
   const defaults = defaultData();
-  const inferredDrivers = [...new Set((parsed.trips ?? []).map((trip) => trip.driver).filter(Boolean))].slice(0, 3);
+  const inferredDrivers = [...new Set((parsed.trips ?? []).map((trip) => trip.driver).filter(Boolean))];
   const inferredPlaces = [...new Set((parsed.trips ?? []).flatMap((trip) => [trip.from, trip.to]).filter(Boolean))];
   return {
     ...defaults,

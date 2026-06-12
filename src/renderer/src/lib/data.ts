@@ -1,4 +1,4 @@
-import type { Driver, FuelRecord, LogbookData, Place, Trip, Vehicle } from "../types";
+import type { Driver, FuelRecord, LogbookData, Place, Trip, Vehicle } from "../../../shared/types";
 
 export const createId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -105,6 +105,24 @@ export function recalculateOdometers(data: LogbookData, vehicleId?: string): Log
   });
 
   return { ...data, trips };
+}
+
+export function previousTrip(data: LogbookData, trip: Trip): Trip | undefined {
+  return data.trips
+    .filter((item) => item.vehicleId === trip.vehicleId && item.id !== trip.id && `${item.date} ${item.departureTime}` <= `${trip.date} ${trip.departureTime}`)
+    .sort((a, b) => compareTrips(a, b))
+    .at(-1);
+}
+
+// Doplní chybějící (nulový) počáteční tachometr podle předchozí jízdy,
+// případně podle počátečního stavu vozidla. Zadané hodnoty nepřepisuje.
+export function autoFillOdometerStart(trip: Trip, data: LogbookData): Trip {
+  if (Number(trip.odometerStart) > 0) return trip;
+  const previous = previousTrip(data, trip);
+  const vehicle = data.vehicles.find((item) => item.id === trip.vehicleId);
+  const start = previous ? Number(previous.odometerEnd) : Number(vehicle?.initialOdometer) || 0;
+  if (!start) return trip;
+  return { ...trip, odometerStart: start };
 }
 
 export function getLastOdometer(data: LogbookData, vehicleId?: string) {

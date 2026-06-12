@@ -1,6 +1,7 @@
+// Pozor: jde o klientskou zábranu, ne o skutečné zabezpečení.
+// Heslo je součástí veřejného JS bundle. Pro silné řízení přístupu
+// použijte Cloudflare Access (viz README).
 const password = "knihajizd";
-
-export const usesDefaultPassword = true;
 
 export function isAuthenticated() {
   return false;

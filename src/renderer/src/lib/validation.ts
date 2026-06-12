@@ -1,4 +1,4 @@
-import type { LogbookData, Trip } from "../types";
+import type { LogbookData, Trip } from "../../../shared/types";
 import { tripKm } from "./data";
 
 export interface ValidationIssue {
