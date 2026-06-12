@@ -6,7 +6,8 @@ const createId = () =>
 export const defaultSettings = (): LogbookData["settings"] => ({
   highKmPerDayThreshold: 800,
   autoBackup: true,
-  theme: "light"
+  theme: "light",
+  mapyApiKey: ""
 });
 
 export const emptyLogbook = (): LogbookData => ({
@@ -114,7 +115,8 @@ export function parseLogbookData(input: unknown): LogbookData {
     settings: {
       highKmPerDayThreshold: num(rawSettings.highKmPerDayThreshold, defaults.highKmPerDayThreshold),
       autoBackup: typeof rawSettings.autoBackup === "boolean" ? rawSettings.autoBackup : defaults.autoBackup,
-      theme: rawSettings.theme === "dark" ? "dark" : "light"
+      theme: rawSettings.theme === "dark" ? "dark" : "light",
+      mapyApiKey: str(rawSettings.mapyApiKey)
     }
   };
 }

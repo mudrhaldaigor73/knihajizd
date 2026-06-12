@@ -1,8 +1,9 @@
-import { Plus, Search, Trash2 } from "lucide-react";
+import { MapPinned, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { LogbookData, Trip } from "../../../shared/types";
 import { Input, IssueList, PlaceInput, Select } from "../components/fields";
 import { autoFillOdometerStart, blankTrip, recalculateOdometersAfter, tripKm, vehicleName } from "../lib/data";
+import { getRouteKm } from "../lib/routing";
 import { collectGeneratedTripErrors, isOvernight, repeatPreview, repeatedTrips, withReturnTrips, type RepeatSettings } from "../lib/tripGenerators";
 import { validateTrip } from "../lib/validation";
 
@@ -14,6 +15,7 @@ export function Trips({ data, updateData }: { data: LogbookData; updateData: Upd
   const [form, setForm] = useState<Trip>(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""));
   const [repeat, setRepeat] = useState<RepeatSettings>(defaultRepeat);
   const [returnTrip, setReturnTrip] = useState(false);
+  const [routing, setRouting] = useState(false);
   const [query, setQuery] = useState("");
   const [type, setType] = useState("vše");
   const [dateFrom, setDateFrom] = useState("");
@@ -59,6 +61,19 @@ export function Trips({ data, updateData }: { data: LogbookData; updateData: Upd
     const start = Number(autoFillOdometerStart(form, data).odometerStart);
     setForm({ ...form, odometerStart: start, odometerEnd: start + km });
   };
+  const fetchDistance = async () => {
+    const apiKey = data.settings.mapyApiKey.trim();
+    if (!apiKey) return alert("Nejdřív vyplňte API klíč Mapy.cz v Nastavení (klíč získáte na developer.mapy.cz).");
+    setRouting(true);
+    try {
+      const km = await getRouteKm(form.from, form.to, apiKey);
+      setKm(String(km));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Vzdálenost se nepodařilo zjistit.");
+    } finally {
+      setRouting(false);
+    }
+  };
   const save = () => {
     const prepared = autoFillOdometerStart(form, data);
     const preparedIssues = validateTrip(prepared, { ...data, trips: data.trips.filter((trip) => trip.id !== prepared.id) });
@@ -98,6 +113,7 @@ export function Trips({ data, updateData }: { data: LogbookData; updateData: Upd
           <Input label="Účel cesty" value={form.purpose} onChange={(purpose) => setForm({ ...form, purpose })} />
           <Select label="Typ cesty" value={form.type} onChange={(value) => setForm({ ...form, type: value as Trip["type"] })} options={[["služební", "služební"], ["soukromá", "soukromá"]]} />
           <Input label="Ujeto km" type="number" value={tripKm(form)} onChange={setKm} />
+          <label><span>Vzdálenost podle mapy</span><button onClick={fetchDistance} disabled={routing || !form.from.trim() || !form.to.trim()}><MapPinned size={16} /> {routing ? "Zjišťuji…" : "Zjistit km z trasy"}</button></label>
           <Input label="Tachometr odjezd" type="number" value={form.odometerStart} onChange={(odometerStart) => setForm({ ...form, odometerStart: Number(odometerStart) })} />
           <Input label="Tachometr příjezd" type="number" value={form.odometerEnd} onChange={(odometerEnd) => setForm({ ...form, odometerEnd: Number(odometerEnd) })} />
           <label><span>Poznámka</span><textarea value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>

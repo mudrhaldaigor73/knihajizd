@@ -59,7 +59,8 @@ export const logbook = (over: Partial<LogbookData> = {}): LogbookData => ({
   settings: {
     highKmPerDayThreshold: 800,
     autoBackup: true,
-    theme: "light"
+    theme: "light",
+    mapyApiKey: ""
   },
   ...over
 });

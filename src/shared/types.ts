@@ -62,6 +62,7 @@ export interface LogbookData {
     highKmPerDayThreshold: number;
     autoBackup: boolean;
     theme: "light" | "dark";
+    mapyApiKey: string;
   };
 }
 

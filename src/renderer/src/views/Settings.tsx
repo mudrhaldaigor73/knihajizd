@@ -28,6 +28,7 @@ export function SettingsPanel({ data, setData, updateData, filePath, setMessage 
         <label><span>Datový soubor</span><input value={filePath ?? "Soubor zatím nebyl uložen"} readOnly /></label>
         <label className="switch"><input type="checkbox" checked={data.settings.autoBackup} onChange={(event) => updateData((current) => ({ ...current, settings: { ...current.settings, autoBackup: event.target.checked } }))} /><span>Automatické zálohování před uložením</span></label>
         <Input label="Limit podezřelých km za den" type="number" value={data.settings.highKmPerDayThreshold} onChange={(highKmPerDayThreshold) => updateData((current) => ({ ...current, settings: { ...current.settings, highKmPerDayThreshold: Number(highKmPerDayThreshold) } }))} />
+        <Input label="API klíč Mapy.cz — zjišťování km z trasy (klíč zdarma na developer.mapy.cz)" value={data.settings.mapyApiKey} onChange={(mapyApiKey) => updateData((current) => ({ ...current, settings: { ...current.settings, mapyApiKey } }))} />
         <button onClick={backup}>Vytvořit ruční zálohu</button>
         <button onClick={recalculate}>Přepočítat tachometry podle návaznosti</button>
       </div>
