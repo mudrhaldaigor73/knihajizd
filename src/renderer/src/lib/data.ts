@@ -1,21 +1,10 @@
+import { emptyLogbook } from "../../../shared/parseLogbook";
 import type { Driver, FuelRecord, LogbookData, Place, Trip, Vehicle } from "../../../shared/types";
 
 export const createId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 
-export const emptyData = (): LogbookData => ({
-  version: 1,
-  vehicles: [],
-  drivers: [],
-  places: [],
-  trips: [],
-  fuels: [],
-  settings: {
-    highKmPerDayThreshold: 800,
-    autoBackup: true,
-    theme: "light"
-  }
-});
+export const emptyData = emptyLogbook;
 
 export const blankDriver = (): Driver => ({
   id: createId(),

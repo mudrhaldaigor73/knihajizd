@@ -502,6 +502,80 @@ th {
   width: auto;
 }
 
+.print-report {
+  display: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-report,
+  .print-report * {
+    visibility: visible;
+  }
+
+  .print-report {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 0;
+    color: #000;
+    background: #fff;
+    font-size: 10pt;
+  }
+
+  .print-report h1 {
+    font-size: 16pt;
+    margin-bottom: 4pt;
+  }
+
+  .print-report h2 {
+    font-size: 12pt;
+    margin: 14pt 0 6pt;
+  }
+
+  .print-report p {
+    margin: 0 0 10pt;
+  }
+
+  .print-report table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+  }
+
+  .print-report th,
+  .print-report td {
+    border: 0.5pt solid #444;
+    padding: 3pt 4pt;
+    color: #000;
+    text-align: left;
+  }
+
+  .print-report thead {
+    display: table-header-group;
+  }
+
+  .print-report tr {
+    page-break-inside: avoid;
+  }
+
+  .print-report .print-total td {
+    font-weight: 700;
+  }
+
+  .print-signatures {
+    margin-top: 28pt;
+    display: flex;
+    justify-content: space-between;
+    gap: 24pt;
+  }
+}
+
 @media (max-width: 1180px) {
   .metrics {
     grid-template-columns: repeat(3, 1fr);

@@ -8,10 +8,14 @@ export interface ValidationIssue {
 }
 
 const required = (value: string | number | undefined | null) => value !== undefined && value !== null && String(value).trim() !== "";
+
 const minutes = (time: string) => {
   const [hours, mins] = time.split(":").map(Number);
   return hours * 60 + mins;
 };
+
+// Příjezd dřívější než odjezd se počítá jako jízda přes půlnoc (+1 den).
+const durationMinutes = (trip: Trip) => (minutes(trip.arrivalTime) - minutes(trip.departureTime) + 1440) % 1440;
 
 export function validateTrip(trip: Trip, data: LogbookData): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
@@ -34,8 +38,8 @@ export function validateTrip(trip: Trip, data: LogbookData): ValidationIssue[] {
     issues.push({ id: `${trip.id}-odo`, severity: "error", message: "Konečný stav tachometru musí být vyšší než počáteční." });
   }
 
-  if (trip.arrivalTime <= trip.departureTime) {
-    issues.push({ id: `${trip.id}-time`, severity: "error", message: "Čas příjezdu musí být později než čas odjezdu." });
+  if (trip.departureTime && trip.arrivalTime && trip.arrivalTime === trip.departureTime) {
+    issues.push({ id: `${trip.id}-time`, severity: "error", message: "Čas příjezdu nesmí být stejný jako čas odjezdu." });
   }
 
   const sameVehicleTrips = data.trips
@@ -68,9 +72,16 @@ export function validateTrip(trip: Trip, data: LogbookData): ValidationIssue[] {
     issues.push({ id: `${trip.id}-high-km`, severity: "warning", message: `Podezřele vysoký počet kilometrů za den: ${dayKm} km.` });
   }
 
+  // Intervaly se porovnávají v minutách od půlnoci dne odjezdu; jízda přes
+  // půlnoc tak má konec za hranicí 1440 minut a překryje i časné jízdy
+  // dalšího dne se stejným datem odjezdu.
   const overlap = sameVehicleTrips.find((item) => {
     if (item.date !== trip.date) return false;
-    return minutes(trip.departureTime) < minutes(item.arrivalTime) && minutes(trip.arrivalTime) > minutes(item.departureTime);
+    const tripStart = minutes(trip.departureTime);
+    const tripEnd = tripStart + durationMinutes(trip);
+    const itemStart = minutes(item.departureTime);
+    const itemEnd = itemStart + durationMinutes(item);
+    return tripStart < itemEnd && tripEnd > itemStart;
   });
   if (overlap) issues.push({ id: `${trip.id}-overlap`, severity: "warning", message: "Čas jízdy se překrývá s jinou jízdou stejného vozidla." });
 

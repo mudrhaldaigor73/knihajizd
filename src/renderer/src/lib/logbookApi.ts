@@ -1,3 +1,4 @@
+import { parseLogbookData } from "../../../shared/parseLogbook";
 import type { FileState, LogbookData, SaveResult } from "../../../shared/types";
 import { emptyData } from "./data";
 import { downloadCsv, downloadJson, downloadXlsx } from "./browserExport";
@@ -12,33 +13,22 @@ export interface LogbookApi {
   exportXlsx: (data: LogbookData) => Promise<SaveResult>;
   exportCsv: (data: LogbookData) => Promise<SaveResult>;
   importJson: () => Promise<FileState | null>;
+  /** Průběžné ukládání při každé změně (jen webová verze — localStorage). */
+  autoPersist?: (data: LogbookData) => void;
 }
 
 const storageKey = "moje-kniha-jizd:data";
 const savedName = "Úložiště prohlížeče";
 const defaultJsonName = "kniha-jizd-data.json";
 
-const createBrowserId = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-
-function normalize(data: Partial<LogbookData>): LogbookData {
-  const defaults = emptyData();
-  return {
-    ...defaults,
-    ...data,
-    vehicles: data.vehicles ?? [],
-    drivers: data.drivers ?? [],
-    places: data.places ?? [...new Set((data.trips ?? []).flatMap((trip) => [trip.from, trip.to]).filter(Boolean))].map((name) => ({ id: createBrowserId(), name, note: "" })),
-    trips: data.trips ?? [],
-    fuels: data.fuels ?? [],
-    settings: { ...defaults.settings, ...data.settings }
-  };
-}
-
 function readBrowserData(): LogbookData {
   const raw = localStorage.getItem(storageKey);
   if (!raw) return emptyData();
-  return normalize(JSON.parse(raw) as Partial<LogbookData>);
+  try {
+    return parseLogbookData(JSON.parse(raw));
+  } catch {
+    return emptyData();
+  }
 }
 
 const storageFullMessage = "Data se nepodařilo uložit do prohlížeče (úložiště je plné nebo blokované). Stáhněte si JSON zálohu, ať o data nepřijdete.";
@@ -79,7 +69,7 @@ async function saveJsonWithPicker(data: LogbookData, suggestedName = defaultJson
 }
 
 function pickJsonFile(): Promise<FileState | null> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "application/json,.json";
@@ -87,11 +77,11 @@ function pickJsonFile(): Promise<FileState | null> {
       const file = input.files?.[0];
       if (!file) return resolve(null);
       try {
-        const data = normalize(JSON.parse(await file.text()) as Partial<LogbookData>);
+        const data = parseLogbookData(JSON.parse(await file.text()));
         writeBrowserData(data);
         resolve({ path: file.name, data });
-      } catch {
-        resolve(null);
+      } catch (error) {
+        reject(error);
       }
     };
     input.click();
@@ -132,7 +122,10 @@ const browserApi: LogbookApi = {
     downloadCsv(data);
     return { ok: true, path: "stažený CSV soubor" };
   },
-  importJson: pickJsonFile
+  importJson: pickJsonFile,
+  autoPersist: (data) => {
+    writeBrowserData(data);
+  }
 };
 
 export function getLogbookApi(): LogbookApi {

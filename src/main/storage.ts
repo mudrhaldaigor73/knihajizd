@@ -1,38 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { app } from "electron";
+import { emptyLogbook, parseLogbookData } from "../shared/parseLogbook.js";
 import type { LogbookData } from "../shared/types.js";
 
-export const defaultData = (): LogbookData => ({
-  version: 1,
-  vehicles: [],
-  drivers: [],
-  places: [],
-  trips: [],
-  fuels: [],
-  settings: {
-    highKmPerDayThreshold: 800,
-    autoBackup: true,
-    theme: "light"
-  }
-});
-
-function createId() {
-  return `${Date.now()}-${Math.random()}`;
-}
-
-function normalizeData(parsed: Partial<LogbookData>): LogbookData {
-  const defaults = defaultData();
-  const inferredDrivers = [...new Set((parsed.trips ?? []).map((trip) => trip.driver).filter(Boolean))];
-  const inferredPlaces = [...new Set((parsed.trips ?? []).flatMap((trip) => [trip.from, trip.to]).filter(Boolean))];
-  return {
-    ...defaults,
-    ...parsed,
-    drivers: parsed.drivers ?? inferredDrivers.map((name) => ({ id: createId(), name, note: "" })),
-    places: parsed.places ?? inferredPlaces.map((name) => ({ id: createId(), name, note: "" })),
-    settings: { ...defaults.settings, ...parsed.settings }
-  };
-}
+export const defaultData = emptyLogbook;
 
 const settingsPath = () => path.join(app.getPath("userData"), "settings.json");
 
@@ -50,8 +22,7 @@ export async function writeSettings(settings: { lastFilePath: string | null }) {
 }
 
 export async function readDataFile(filePath: string): Promise<LogbookData> {
-  const parsed = JSON.parse(await fs.readFile(filePath, "utf8")) as Partial<LogbookData>;
-  return normalizeData(parsed);
+  return parseLogbookData(JSON.parse(await fs.readFile(filePath, "utf8")));
 }
 
 export async function writeDataFile(filePath: string, data: LogbookData) {
