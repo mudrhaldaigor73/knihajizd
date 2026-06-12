@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoFillOdometerStart, getLastOdometer, recalculateOdometers } from "../src/renderer/src/lib/data";
+import { autoFillOdometerStart, getLastOdometer, recalculateOdometers, recalculateOdometersAfter } from "../src/renderer/src/lib/data";
 import { logbook, trip, vehicle } from "./helpers";
 
 describe("autoFillOdometerStart", () => {
@@ -39,6 +39,48 @@ describe("recalculateOdometers", () => {
     expect(a.odometerEnd).toBe(1150);
     expect(b.odometerStart).toBe(1150);
     expect(b.odometerEnd).toBe(1251);
+  });
+});
+
+describe("recalculateOdometersAfter", () => {
+  it("posune tachometry jízd následujících po zpětně vložené jízdě", () => {
+    const data = logbook({
+      trips: [
+        trip({ id: "a", date: "2026-06-01", odometerStart: 1000, odometerEnd: 1100 }),
+        trip({ id: "c", date: "2026-06-03", odometerStart: 1100, odometerEnd: 1300 }),
+        trip({ id: "b", date: "2026-06-02", odometerStart: 1100, odometerEnd: 1150 })
+      ]
+    });
+    const result = recalculateOdometersAfter(data, data.trips[2]);
+    const a = result.trips.find((item) => item.id === "a")!;
+    const c = result.trips.find((item) => item.id === "c")!;
+    expect(a.odometerStart).toBe(1000);
+    expect(a.odometerEnd).toBe(1100);
+    expect(c.odometerStart).toBe(1150);
+    expect(c.odometerEnd).toBe(1350);
+  });
+
+  it("nemění jízdy jiných vozidel", () => {
+    const data = logbook({
+      trips: [
+        trip({ id: "b", date: "2026-06-02", odometerStart: 1100, odometerEnd: 1150 }),
+        trip({ id: "x", vehicleId: "v2", date: "2026-06-03", odometerStart: 500, odometerEnd: 600 })
+      ]
+    });
+    const result = recalculateOdometersAfter(data, data.trips[0]);
+    const x = result.trips.find((item) => item.id === "x")!;
+    expect(x.odometerStart).toBe(500);
+    expect(x.odometerEnd).toBe(600);
+  });
+
+  it("vrací data beze změny, když jízdy navazují", () => {
+    const data = logbook({
+      trips: [
+        trip({ id: "a", date: "2026-06-01", odometerStart: 1000, odometerEnd: 1100 }),
+        trip({ id: "b", date: "2026-06-02", odometerStart: 1100, odometerEnd: 1150 })
+      ]
+    });
+    expect(recalculateOdometersAfter(data, data.trips[0])).toBe(data);
   });
 });
 

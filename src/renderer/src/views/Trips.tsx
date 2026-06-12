@@ -2,7 +2,7 @@ import { Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { LogbookData, Trip } from "../../../shared/types";
 import { Input, IssueList, PlaceInput, Select } from "../components/fields";
-import { autoFillOdometerStart, blankTrip, getLastOdometer, tripKm, vehicleName } from "../lib/data";
+import { autoFillOdometerStart, blankTrip, recalculateOdometersAfter, tripKm, vehicleName } from "../lib/data";
 import { collectGeneratedTripErrors, isOvernight, repeatPreview, repeatedTrips, withReturnTrips, type RepeatSettings } from "../lib/tripGenerators";
 import { validateTrip } from "../lib/validation";
 
@@ -47,6 +47,18 @@ export function Trips({ data, updateData }: { data: LogbookData; updateData: Upd
     setReturnTrip(false);
     setForm(blankTrip(data.vehicles[0]?.id ?? "", data.drivers[0]?.name ?? ""));
   };
+  // Předvyplní počáteční tachometr podle jízdy předcházející zadanému datu
+  // (důležité při zpětném zadávání) a zachová už zadané ujeté kilometry.
+  const refillOdometer = (changes: Partial<Trip>) => {
+    const km = tripKm(form);
+    const start = Number(autoFillOdometerStart({ ...form, ...changes, odometerStart: 0 }, data).odometerStart);
+    setForm({ ...form, ...changes, odometerStart: start, odometerEnd: start + km });
+  };
+  const setKm = (value: string) => {
+    const km = Math.max(0, Math.floor(Number(value) || 0));
+    const start = Number(autoFillOdometerStart(form, data).odometerStart);
+    setForm({ ...form, odometerStart: start, odometerEnd: start + km });
+  };
   const save = () => {
     const prepared = autoFillOdometerStart(form, data);
     const preparedIssues = validateTrip(prepared, { ...data, trips: data.trips.filter((trip) => trip.id !== prepared.id) });
@@ -56,7 +68,15 @@ export function Trips({ data, updateData }: { data: LogbookData; updateData: Upd
     if (!isEditing && repeat.enabled && tripsToSave.length < 2) return alert("Pro opakování nastavte počet alespoň 2 jízdy.");
     const generatedErrors = collectGeneratedTripErrors(tripsToSave, data);
     if (generatedErrors.length) return alert(`Opakované jízdy nelze uložit: ${generatedErrors[0].message}`);
-    updateData((current) => ({ ...current, trips: current.trips.some((item) => item.id === prepared.id) ? current.trips.map((item) => item.id === prepared.id ? prepared : item) : [...current.trips, ...tripsToSave] }));
+    // Po uložení (i zpětném) se tachometry navazujících jízd posunou tak,
+    // aby na sebe chronologicky navazovaly.
+    const anchor = isEditing ? prepared : tripsToSave[0];
+    updateData((current) => {
+      const trips = current.trips.some((item) => item.id === prepared.id)
+        ? current.trips.map((item) => (item.id === prepared.id ? prepared : item))
+        : [...current.trips, ...tripsToSave];
+      return recalculateOdometersAfter({ ...current, trips }, anchor);
+    });
     resetForm();
   };
   const remove = (id: string) => {
@@ -68,15 +88,16 @@ export function Trips({ data, updateData }: { data: LogbookData; updateData: Upd
       <div className="panel">
         <div className="section-title"><h2>Jízda</h2><span>Ujeto {tripKm(form)} km{isOvernight(form) ? ", příjezd následující den" : ""}</span></div>
         <div className="form-grid trip-form">
-          <Input label="Datum" type="date" value={form.date} onChange={(date) => setForm({ ...form, date })} />
+          <Input label="Datum" type="date" value={form.date} onChange={(date) => refillOdometer({ date })} />
           <Input label="Čas odjezdu" type="time" value={form.departureTime} onChange={(departureTime) => setForm({ ...form, departureTime })} />
           <Input label="Čas příjezdu" type="time" value={form.arrivalTime} onChange={(arrivalTime) => setForm({ ...form, arrivalTime })} />
-          <Select label="Vozidlo" value={form.vehicleId} onChange={(vehicleId) => setForm({ ...form, vehicleId, odometerStart: getLastOdometer(data, vehicleId), odometerEnd: getLastOdometer(data, vehicleId) })} options={data.vehicles.map((vehicle) => [vehicle.id, vehicleName(vehicle)])} />
+          <Select label="Vozidlo" value={form.vehicleId} onChange={(vehicleId) => refillOdometer({ vehicleId })} options={data.vehicles.map((vehicle) => [vehicle.id, vehicleName(vehicle)])} />
           <Select label="Řidič" value={form.driver} onChange={(driver) => setForm({ ...form, driver })} options={driverOptions(data, form.driver)} />
           <PlaceInput label="Odkud" value={form.from} places={data.places} onChange={(from) => setForm({ ...form, from })} />
           <PlaceInput label="Kam" value={form.to} places={data.places} onChange={(to) => setForm({ ...form, to })} />
           <Input label="Účel cesty" value={form.purpose} onChange={(purpose) => setForm({ ...form, purpose })} />
           <Select label="Typ cesty" value={form.type} onChange={(value) => setForm({ ...form, type: value as Trip["type"] })} options={[["služební", "služební"], ["soukromá", "soukromá"]]} />
+          <Input label="Ujeto km" type="number" value={tripKm(form)} onChange={setKm} />
           <Input label="Tachometr odjezd" type="number" value={form.odometerStart} onChange={(odometerStart) => setForm({ ...form, odometerStart: Number(odometerStart) })} />
           <Input label="Tachometr příjezd" type="number" value={form.odometerEnd} onChange={(odometerEnd) => setForm({ ...form, odometerEnd: Number(odometerEnd) })} />
           <label><span>Poznámka</span><textarea value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>

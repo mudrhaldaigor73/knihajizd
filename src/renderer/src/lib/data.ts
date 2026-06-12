@@ -96,6 +96,32 @@ export function recalculateOdometers(data: LogbookData, vehicleId?: string): Log
   return { ...data, trips };
 }
 
+// Po uložení jízdy (typicky zadané zpětně) posune tachometry všech
+// chronologicky navazujících jízd stejného vozidla tak, aby na sebe
+// navazovaly. Kilometry jednotlivých jízd zůstávají zachované; jízdy
+// před uloženou jízdou a ostatní vozidla se nemění.
+export function recalculateOdometersAfter(data: LogbookData, savedTrip: Trip): LogbookData {
+  const ordered = data.trips
+    .map((trip, index) => ({ trip, index }))
+    .filter(({ trip }) => trip.vehicleId === savedTrip.vehicleId)
+    .sort((left, right) => compareTrips(left.trip, right.trip) || left.index - right.index);
+  const position = ordered.findIndex(({ trip }) => trip.id === savedTrip.id);
+  if (position === -1) return data;
+
+  const updates = new Map<string, Trip>();
+  let odometer = Number(ordered[position].trip.odometerEnd);
+  ordered.slice(position + 1).forEach(({ trip }) => {
+    const km = tripKm(trip);
+    if (Number(trip.odometerStart) !== odometer || Number(trip.odometerEnd) !== odometer + km) {
+      updates.set(trip.id, { ...trip, odometerStart: odometer, odometerEnd: odometer + km });
+    }
+    odometer += km;
+  });
+
+  if (!updates.size) return data;
+  return { ...data, trips: data.trips.map((trip) => updates.get(trip.id) ?? trip) };
+}
+
 export function previousTrip(data: LogbookData, trip: Trip): Trip | undefined {
   return data.trips
     .filter((item) => item.vehicleId === trip.vehicleId && item.id !== trip.id && `${item.date} ${item.departureTime}` <= `${trip.date} ${trip.departureTime}`)
